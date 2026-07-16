@@ -552,10 +552,22 @@ function showAlertPicker(id, dir, price) {
 }
 
 async function pickAlert(id, dir, thr) {
+  const box = document.getElementById('alpick');
+  const word = dir === 'd' ? 'подешевеет до' : 'подорожает до';
+  const confirmHtml = ok => '<div class="signal" style="background:var(--green-bg);margin-top:12px">' +
+    '<i style="background:var(--green)"></i><b style="color:var(--green)">' +
+    (ok ? '✅ Принято! Сообщу, когда ' : '🔁 Уже слежу — сообщу, когда ') + word + ' ' + fmt(thr) + ' ₮</b></div>';
+  // защита от повторных нажатий: такой порог уже стоит
+  if ((alGetAll()[id] || []).some(a => a.d === dir && a.t === thr)) {
+    if (box) box.innerHTML = confirmHtml(false);
+    return;
+  }
   let w = await wlGet();
   if (!w.includes(id)) { w.push(id); wlSet(w); }   // слежу за ценой = в избранном
   alAdd(id, dir, thr);
-  openBotLink('al_' + dir + '_' + id + '_' + thr);
+  if (box) box.innerHTML = confirmHtml(true);      // кнопки исчезают -> дубль не накликать
+  if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
+  setTimeout(() => openBotLink('al_' + dir + '_' + id + '_' + thr), 450);
 }
 
 function openBotLink(payload) {

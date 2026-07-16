@@ -154,9 +154,15 @@ async def cmd_start(m: Message, command: CommandObject):
                 item = await db.get_item(item_id)
                 if item:
                     threshold = float(parts[3])
+                    word = "подешевеет до" if direction == "below" else "подорожает до"
+                    if await db.alert_exists(m.from_user.id, item_id, direction, threshold):
+                        await m.answer(
+                            f"🔁 Это уведомление уже стоит: <b>{item[1]}</b> {word} <b>{fmt(threshold)} ₮</b>. "
+                            f"Всё под контролем! Список: /alerts"
+                        )
+                        return
                     await db.alert_add(m.from_user.id, item_id, direction, threshold)
                     await db.watch_add(m.from_user.id, item_id)
-                    word = "подешевеет до" if direction == "below" else "подорожает до"
                     await m.answer(
                         f"✅ Принято! Сообщу, когда <b>{item[1]}</b> {word} <b>{fmt(threshold)} ₮</b>.\n"
                         f"⭐ Предмет добавлен в избранное.\n"
@@ -232,10 +238,14 @@ async def alert_threshold(m: Message, state: FSMContext):
         return
     data = await state.get_data()
     direction = data.get("direction", "below")
+    word = "подешевеет до" if direction == "below" else "подорожает до"
+    if await db.alert_exists(m.from_user.id, data["item_id"], direction, threshold):
+        await state.clear()
+        await m.answer(f"🔁 Это уведомление уже стоит. Список: /alerts")
+        return
     await db.alert_add(m.from_user.id, data["item_id"], direction, threshold)
     await db.watch_add(m.from_user.id, data["item_id"])
     await state.clear()
-    word = "подешевеет до" if direction == "below" else "подорожает до"
     await m.answer(
         f"✅ Принято! Сообщу, когда <b>{data['item_name']}</b> {word} <b>{fmt(threshold)} ₮</b>.\n"
         f"⭐ Предмет добавлен в избранное."
@@ -317,9 +327,12 @@ async def cb_mkal(c: CallbackQuery):
     if not item:
         await c.answer("Предмет не найден", show_alert=True)
         return
+    word = "подешевеет до" if direction == "below" else "подорожает до"
+    if await db.alert_exists(c.from_user.id, item_id, direction, float(threshold)):
+        await c.answer("Уже стоит 😉", show_alert=False)
+        return
     await db.alert_add(c.from_user.id, item_id, direction, float(threshold))
     await db.watch_add(c.from_user.id, item_id)
-    word = "подешевеет до" if direction == "below" else "подорожает до"
     await c.message.edit_text(
         f"✅ Принято! Сообщу, когда <b>{item[1]}</b> {word} <b>{fmt(float(threshold))} ₮</b>.\n"
         f"⭐ Предмет добавлен в избранное.\n"

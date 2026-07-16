@@ -124,6 +124,15 @@ async def is_watched(tg_id: int, item_id: str) -> bool:
 
 # ---------- алерты ----------
 
+async def alert_exists(tg_id: int, item_id: str, direction: str, threshold: float) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT 1 FROM alerts WHERE tg_id=? AND item_id=? AND direction=? AND threshold=? AND active=1",
+            (tg_id, item_id, direction, threshold),
+        )
+        return await cur.fetchone() is not None
+
+
 async def alert_add(tg_id: int, item_id: str, direction: str, threshold: float) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
