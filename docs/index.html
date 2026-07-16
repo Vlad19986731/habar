@@ -7,15 +7,20 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
-    --page:#08090b; --app:#0d0f12; --edge:#1e2228;
-    --surface:#171a1f; --border:#262b33; --divider:#20242b; --well:#0a0c0f; --well-b:#2c323b;
-    --tabbar:#101317; --tab-b:#23272e;
-    --text:#f2f4f7; --white:#ffffff; --text2:#7d8694; --text3:#5c656e;
-    --orange:#ff9f2e; --orange-h:#ffb75c;
-    --green:#43dd7c; --green-bg:#10271a;
-    --red:#ff5f52; --red-bg:#2a1412;
-    --amber:#e9c463;
+    --page:#04090d; --app:#060E13; --edge:#1B2A33;
+    --surface:#0C161D; --border:#1B2A33; --divider:#12202a; --well:#081019; --well-b:#1B2A33;
+    --tabbar:#081019; --tab-b:#1B2A33;
+    --text:#FEFEFE; --white:#FEFEFE; --text2:#8D8A8A; --text3:#5d6b74;
+    --orange:#0FF796; --orange-h:#28FBB1;
+    --green:#4CAF7D; --green-bg:rgba(76,175,125,.1); --green-bd:rgba(76,175,125,.35);
+    --red:#E05252; --red-bg:rgba(224,82,82,.1); --red-bd:rgba(224,82,82,.35);
+    --amber:#E0B352;
+    --mono:ui-monospace,Consolas,monospace;
   }
+  @keyframes hpulse{0%,100%{opacity:1}50%{opacity:.2}}
+  @keyframes hscan{0%{top:-10%}100%{top:110%}}
+  @keyframes hfade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
   body{
@@ -33,31 +38,40 @@
     border-left:1px solid var(--edge); border-right:1px solid var(--edge);
   }
   main{flex:1; overflow-y:auto; min-height:0; padding:14px 16px calc(84px + env(safe-area-inset-bottom))}
+  main.fade{animation:hfade .35s ease-out both}
 
-  /* ---------- фирменные элементы ---------- */
-  .cut{ clip-path:polygon(0 0,100% 0,100% 100%,16px 100%,0 calc(100% - 16px)); }
-  .cut-s{ clip-path:polygon(0 0,100% 0,100% 100%,10px 100%,0 calc(100% - 10px)); }
+  /* ---------- фирменные элементы (Delta Force HUD) ---------- */
+  .cut{ clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px); }
+  .cut-s{ clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
+  .cut-m{ clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px); }
   .card{
-    background:var(--surface); border:1px solid var(--border); border-radius:10px;
-    padding:16px; position:relative; overflow:hidden;
+    background:var(--surface); border:1px solid var(--border); border-radius:0;
+    padding:15px; position:relative; overflow:hidden;
   }
-  .strip{position:absolute; top:0; left:0; width:64px; height:3px; background:var(--orange)}
+  .strip{
+    position:absolute; left:0; right:0; top:-10%; height:2px; width:auto;
+    background:linear-gradient(90deg,transparent,rgba(15,247,150,.5),transparent);
+    animation:hscan 3.5s linear infinite; pointer-events:none;
+  }
   .label{
-    color:var(--text2); font-size:10px; font-weight:700;
-    letter-spacing:.14em; text-transform:uppercase;
+    color:var(--text2); font-size:10px; font-weight:800;
+    letter-spacing:.16em; text-transform:uppercase; font-family:var(--mono);
   }
+  .label::before{content:'// '; color:var(--text3)}
   .chip{
-    display:inline-block; font-size:12px; font-weight:800; padding:4px 10px;
-    border-radius:6px 6px 6px 0;
+    display:inline-block; font-size:11.5px; font-weight:800; padding:4px 9px;
+    border-radius:0; border:1px solid var(--border);
+    clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);
   }
   .btn{
-    flex:1; border:1.5px solid var(--orange); color:var(--orange); background:none;
-    font-size:13px; font-weight:800; text-align:center; padding:12px 0;
-    border-radius:8px 8px 8px 0; letter-spacing:.06em; text-transform:uppercase;
+    flex:1; border:1px solid var(--orange); color:var(--orange); background:none;
+    font-size:12.5px; font-weight:800; text-align:center; padding:13px 0;
+    border-radius:0; letter-spacing:.06em; text-transform:uppercase;
     cursor:pointer; font-family:inherit;
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
   }
-  .btn.fill{ background:var(--orange); color:#1c1102 }
-  .btn:active{ opacity:.75 }
+  .btn.fill{ background:var(--orange); color:#04140c }
+  .btn:active{ opacity:.85; box-shadow:0 0 20px rgba(15,247,150,.55) }
 
   /* ---------- шапка рынка ---------- */
   .brandrow{display:flex; align-items:center; justify-content:space-between}
@@ -65,19 +79,27 @@
   .brand span{color:var(--orange)}
   .wipe{
     background:var(--surface); border:1px solid var(--border); color:var(--amber);
-    font-size:11.5px; font-weight:700; padding:6px 10px; border-radius:6px 6px 6px 0;
-    white-space:nowrap;
+    font-size:10.5px; font-weight:800; padding:6px 10px; border-radius:0;
+    white-space:nowrap; font-family:var(--mono); letter-spacing:.06em;
+    clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  }
+  .verline{
+    color:#3d4a52; font-size:9px; font-family:var(--mono); letter-spacing:.12em; margin-top:4px;
   }
   .search{
     width:100%; margin-top:12px; background:var(--surface); border:1px solid var(--border);
-    border-radius:8px 8px 8px 0; padding:12px 14px; color:var(--text); font-size:14px;
+    border-radius:0; padding:12px 14px; color:var(--text); font-size:14px;
     outline:none; font-family:inherit;
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
   }
   .search:focus{border-color:var(--orange)}
   .sect{margin:16px 0 8px}
 
   /* ---------- список ---------- */
-  .list{background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden}
+  .list{
+    background:var(--surface); border:1px solid var(--border); border-radius:0; overflow:hidden;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+  }
   .row{
     display:flex; align-items:center; gap:10px; padding:9px 12px; min-height:54px;
     border-bottom:1px solid var(--divider); cursor:pointer; width:100%;
@@ -87,11 +109,11 @@
   .row:last-child{border-bottom:none}
   .row:active{background:var(--divider)}
   .well{
-    width:38px; height:38px; background:var(--well); border-radius:6px;
-    border-left:3px solid var(--orange); flex:none; position:relative;
+    width:38px; height:38px; background:var(--well); border-radius:0;
+    border-left:2px solid var(--orange); flex:none; position:relative;
     display:flex; align-items:center; justify-content:center; overflow:hidden;
   }
-  .well .ab{color:var(--orange); font-size:8px; font-family:ui-monospace,Consolas,monospace; letter-spacing:.05em}
+  .well .ab{color:var(--orange); font-size:8px; font-family:var(--mono); letter-spacing:.05em}
   .well img{position:absolute; inset:0; width:100%; height:100%; object-fit:contain}
   .rmain{flex:1; min-width:0}
   .rmain b{
@@ -100,8 +122,14 @@
   }
   .rmain span{display:block; color:var(--text2); font-size:10.5px; font-weight:600; margin-top:1px}
   .rspark{width:56px; height:20px; flex:none}
-  .pbar{height:6px; background:var(--well); border-radius:3px; margin-top:12px; overflow:hidden}
-  .pbar i{display:block; height:100%; background:var(--orange)}
+  .pbar{height:6px; background:#0A1218; border:1px solid var(--border); border-radius:0; margin-top:12px; overflow:hidden}
+  .pbar i{display:block; height:100%; background:repeating-linear-gradient(45deg,#0FF796 0px,#0FF796 6px,#0a9c60 6px,#0a9c60 12px)}
+  .livechip{
+    display:flex; align-items:center; gap:7px; border:1px solid var(--border); padding:5px 10px;
+    clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  }
+  .livechip i{width:7px; height:7px; background:var(--orange); border-radius:50%; animation:hpulse 1.6s ease-in-out infinite; box-shadow:0 0 8px rgba(15,247,150,.7)}
+  .livechip b{color:var(--orange); font-size:10px; font-weight:800; letter-spacing:.16em; font-family:var(--mono)}
 
   /* ---------- рынок: статистика и категории ---------- */
   .statgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
@@ -113,10 +141,12 @@
   .catgrid{display:grid; grid-template-columns:1fr 1fr; gap:8px}
   .catcard{
     display:flex; align-items:center; gap:10px; background:var(--surface);
-    border:1px solid var(--border); border-radius:10px; padding:11px 12px;
+    border:1px solid var(--border); border-radius:0; padding:11px 12px;
     cursor:pointer; font-family:inherit; color:var(--text); text-align:left;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
   }
-  .catcard:active{background:var(--divider)}
+  .catcard:active{border-color:var(--orange)}
+  .catcard span.cnt{font-family:var(--mono)}
   .catcard .ce{font-size:19px; flex:none}
   .catcard b{display:block; font-size:12.5px; font-weight:700}
   .catcard span.cnt{display:block; font-size:10px; color:var(--text2); margin-top:2px; font-weight:600}
@@ -126,17 +156,22 @@
     border:1px solid var(--border); padding:6px 12px; border-radius:15px;
     white-space:nowrap; cursor:pointer;
   }
-  .chip.on{color:#1c1102; background:var(--orange); border-color:var(--orange); font-weight:700}
+  .chip.on{color:#04140c; background:var(--orange); border-color:var(--orange); font-weight:800}
 
   /* ---------- новостные карточки ---------- */
   .nstack{display:flex; flex-direction:column; gap:8px}
   .ncard{
     display:block; width:100%; text-align:left; background:var(--surface);
-    border:1px solid var(--border); border-radius:10px; overflow:hidden;
+    border:1px solid var(--border); border-radius:0; overflow:hidden;
     cursor:pointer; font-family:inherit; padding:0; color:var(--text);
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
   }
   .ncard:active{background:var(--divider)}
-  .ncover{display:block; width:100%; aspect-ratio:2/1; background:var(--well); overflow:hidden}
+  .ncover{
+    display:block; width:100%; aspect-ratio:2/1; overflow:hidden;
+    background:repeating-linear-gradient(135deg,#0F1B24 0px,#0F1B24 10px,#0C161D 10px,#0C161D 20px);
+    border-bottom:1px solid var(--border);
+  }
   .ncover img{width:100%; height:100%; object-fit:cover; display:block}
   .nbody{display:block; padding:10px 12px 12px}
   .nbody b{display:block; font-size:13px; font-weight:700; line-height:1.4}
@@ -167,18 +202,18 @@
   .chead{display:flex; gap:12px; align-items:center}
   .well-lg{
     width:56px; height:56px; background:var(--well); border:1px solid var(--well-b);
-    border-radius:8px; flex:none; position:relative; overflow:hidden;
+    border-radius:0; flex:none; position:relative; overflow:hidden;
     display:flex; align-items:center; justify-content:center;
   }
-  .well-lg .ab{color:var(--orange); font-size:10px; font-family:ui-monospace,Consolas,monospace}
+  .well-lg .ab{color:var(--orange); font-size:9px; font-family:var(--mono)}
   .well-lg img{position:absolute; inset:0; width:100%; height:100%; object-fit:contain}
   .cname{color:var(--text); font-size:16px; font-weight:800; margin-top:2px}
   .langbtn{
     flex:none; align-self:flex-start; border:1px solid var(--border); background:var(--well);
-    color:var(--orange); font-size:10px; font-weight:800; letter-spacing:.08em;
-    padding:5px 9px; border-radius:6px; cursor:pointer; font-family:inherit;
+    color:var(--text2); font-size:9px; font-weight:800; letter-spacing:.08em;
+    padding:5px 8px; border-radius:0; cursor:pointer; font-family:var(--mono);
   }
-  .langbtn:active{opacity:.7}
+  .langbtn:active{color:var(--orange); border-color:var(--orange)}
   .bigprice{
     margin-top:14px; color:var(--white); font-size:33px; font-weight:800;
     letter-spacing:-.02em;
@@ -188,13 +223,14 @@
   .chart{width:100%; height:72px; margin-top:12px; display:block}
   .chart-meta{
     display:flex; justify-content:space-between; margin-top:6px;
-    color:var(--text2); font-size:10px; font-weight:700; letter-spacing:.1em;
+    color:var(--text3); font-size:9.5px; font-weight:700; letter-spacing:.1em; font-family:var(--mono);
   }
   .signal{
-    margin-top:12px; border-radius:8px 8px 8px 0; padding:9px 11px;
+    margin-top:12px; border-radius:0; padding:9px 11px; border:1px solid var(--border);
     display:flex; align-items:center; gap:9px;
+    clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
   }
-  .signal i{width:8px; height:8px; border-radius:2px; flex:none; font-style:normal}
+  .signal i{width:8px; height:8px; border-radius:0; flex:none; font-style:normal}
   .signal b{font-size:12.5px; font-weight:700}
   .btns{display:flex; gap:10px; margin-top:14px}
   .src{margin-top:12px; color:var(--text3); font-size:11px}
@@ -210,19 +246,20 @@
   .soon h3{color:var(--text); font-size:16px; font-weight:800; margin-top:20px}
   .soon p{color:var(--text2); font-size:13px; line-height:1.55; margin-top:8px}
   .soon .cta{
-    display:inline-block; margin-top:18px; border:1.5px solid var(--orange); color:var(--orange);
+    display:inline-block; margin-top:18px; border:1px solid var(--orange); color:var(--orange);
     font-size:13px; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
-    padding:12px 24px; border-radius:8px 8px 8px 0; cursor:pointer;
+    padding:12px 24px; border-radius:0; cursor:pointer;
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
   }
   .h1{color:var(--text); font-size:20px; font-weight:800}
   .sub{color:var(--text2); font-size:12.5px; margin-top:4px}
 
   /* ---------- профиль ---------- */
   .prem{
-    margin-top:12px; background:linear-gradient(160deg,#241505,var(--surface) 70%);
-    border:1px solid #5c3812; border-radius:10px; padding:16px;
+    margin-top:12px; background:linear-gradient(160deg,#08201a,var(--surface) 70%);
+    border:1px solid rgba(15,247,150,.35); border-radius:0; padding:15px;
   }
-  .prem h4{color:var(--orange); font-size:14px; font-weight:800; letter-spacing:.08em}
+  .prem h4{color:var(--orange); font-size:13px; font-weight:800; letter-spacing:.14em; font-family:var(--mono)}
   .prem p{color:#c8ccd2; font-size:12.5px; line-height:1.65; margin-top:8px}
 
   /* ---------- таб-бар ---------- */
@@ -397,7 +434,7 @@ function wlSet(list) {
 function chartSvg(values, opts) {
   opts = opts || {};
   const w = opts.w || 320, h = opts.h || 72;
-  const color = opts.color || '#ff9f2e', fill = opts.fill || 'rgba(255,159,46,.1)';
+  const color = opts.color || '#0FF796', fill = opts.fill || 'rgba(15,247,150,.07)';
   if (!values || values.length < 2) return '';
   const lo = Math.min.apply(null, values), hi = Math.max.apply(null, values), pad = 4;
   const x = i => (i * w / (values.length - 1)).toFixed(1);
@@ -405,7 +442,7 @@ function chartSvg(values, opts) {
   const pts = values.map((v,i) => x(i) + ',' + y(v)).join(' ');
   const last = values.length - 1;
   return '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" class="chart" style="height:' + h + 'px">' +
-    '<line x1="0" y1="' + (h/2) + '" x2="' + w + '" y2="' + (h/2) + '" stroke="#23272e" stroke-width="1" stroke-dasharray="4 4"/>' +
+    '<line x1="0" y1="' + (h/2) + '" x2="' + w + '" y2="' + (h/2) + '" stroke="#12202a" stroke-width="1" stroke-dasharray="4 4"/>' +
     '<polygon points="' + pts + ' ' + w + ',' + h + ' 0,' + h + '" fill="' + fill + '"/>' +
     '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linejoin="round"/>' +
     '<circle cx="' + x(last) + '" cy="' + y(values[last]) + '" r="4" fill="' + color + '"/></svg>';
@@ -467,7 +504,7 @@ async function fillPrices(ids, withTrend) {
         const dEl = document.getElementById('d-' + id);
         if (avgs.length > 1 && dEl) {
           const ch = (p.price - avgs[0]) / avgs[0] * 100;
-          const hex = ch >= 0 ? '#43dd7c' : '#ff5f52';
+          const hex = ch >= 0 ? '#4CAF7D' : '#E05252';
           dEl.textContent = (ch>=0?'▲ +':'▼ ') + ch.toFixed(1) + '%';
           dEl.style.color = hex;
           const rowEl = dEl.closest('.row');
@@ -607,7 +644,7 @@ async function openItem(id) {
   const dev = avg7 ? (price - avg7)/avg7*100 : 0;
 
   const chip = (v, lbl) => v === null ? '' :
-    '<span class="chip num" style="background:var(--' + (v>=0?'green':'red') + '-bg);color:var(--' + (v>=0?'green':'red') + ')">' +
+    '<span class="chip num" style="background:var(--' + (v>=0?'green':'red') + '-bg);color:var(--' + (v>=0?'green':'red') + ');border-color:var(--' + (v>=0?'green':'red') + '-bd)">' +
     (v>=0?'▲ +':'▼ ') + v.toFixed(1) + '% ' + lbl + '</span>';
 
   let sigBg='var(--divider)', sigC='var(--text2)', sigDot='var(--text2)', sigTxt='Около средней за 7 дней';
@@ -733,7 +770,7 @@ function openBotLink(payload) {
 
 function backBtn() {
   return '<button class="back" id="bk">' +
-    '<svg viewBox="0 0 20 20" style="width:16px;height:16px"><polyline points="12,4 6,10 12,16" fill="none" stroke="#ff9f2e" stroke-width="2.5"/></svg>' +
+    '<svg viewBox="0 0 20 20" style="width:16px;height:16px"><polyline points="12,4 6,10 12,16" fill="none" stroke="#0FF796" stroke-width="2.5"/></svg>' +
     'Назад</button>';
 }
 function goBack() { tab === 'stash' ? renderStash() : renderMarket(); }
@@ -769,7 +806,9 @@ function renderFlips() {
 
 async function renderHome() {
   view.innerHTML =
-    '<div class="brandrow"><div class="brand">ХАБАР<span>₮</span></div></div>' +
+    '<div class="brandrow"><div class="brand">ХАБАР<span>₮</span></div>' +
+    '<div class="livechip"><i></i><b>LIVE</b></div></div>' +
+    '<div class="verline">TRADE.TERMINAL // DELTA FORCE OPS</div>' +
     '<div id="seasoncard" class="card cut" style="margin-top:14px"><div class="strip"></div><div class="spin" style="margin:12px auto"></div></div>' +
     '<div class="label sect">Новости и обновления</div>' +
     '<div class="nstack" id="newslist"><div class="spin"></div></div>';
@@ -782,10 +821,13 @@ async function renderHome() {
     const pct = Math.min(100, Math.max(0, (now - start) / (end - start) * 100));
     const el = document.getElementById('seasoncard');
     if (el) el.innerHTML = '<div class="strip"></div>' +
-      '<div class="label">Сезон ' + s.number + ' · «' + s.name + '»</div>' +
-      '<div class="bigprice num" style="font-size:28px;margin-top:8px">' + days + ' <span style="font-size:15px">дн. до вайпа</span></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline">' +
+        '<div style="color:var(--orange);font-size:11px;font-weight:800;letter-spacing:.18em;font-family:var(--mono)">[ СЕЗОН ' + s.number + ' · ' + String(s.name).toUpperCase() + ' ]</div>' +
+        '<div style="color:var(--text2);font-size:10px;font-family:var(--mono)">S' + s.number + '//OPS</div>' +
+      '</div>' +
+      '<div class="bigprice num" style="font-size:26px;margin-top:8px">⏳ ' + days + ' <span style="font-size:15px;color:var(--text)">дн. до вайпа</span></div>' +
       '<div class="pbar"><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
-      '<div class="chart-meta"><span>' + start.toLocaleDateString('ru') + '</span><span>' + end.toLocaleDateString('ru') + '</span></div>' +
+      '<div class="chart-meta"><span>ПРОГРЕСС ' + pct.toFixed(0) + '%</span><span>ВАЙП ' + end.toLocaleDateString('ru') + '</span></div>' +
       '<div class="hint" style="text-align:left;padding:10px 0 0">💡 Перед вайпом гир дешевеет — все распродаются. Сразу после вайпа дорожают материалы и базовый гир.</div>';
   } catch(e) {
     const el = document.getElementById('seasoncard');
@@ -820,7 +862,7 @@ function renderArticle(i) {
   const paras = (n.body_ru || '').split('\n').map(s => s.trim()).filter(Boolean);
   view.innerHTML =
     '<button class="back" id="bk">' +
-    '<svg viewBox="0 0 20 20" style="width:16px;height:16px"><polyline points="12,4 6,10 12,16" fill="none" stroke="#ff9f2e" stroke-width="2.5"/></svg>' +
+    '<svg viewBox="0 0 20 20" style="width:16px;height:16px"><polyline points="12,4 6,10 12,16" fill="none" stroke="#0FF796" stroke-width="2.5"/></svg>' +
     'К новостям</button>' +
     '<div class="card cut" style="margin-top:6px;padding:0">' +
       '<div class="strip" style="z-index:2"></div>' +
@@ -855,7 +897,7 @@ function renderMore() {
     '<div class="card cut" style="margin-top:16px"><div class="strip"></div>' +
     '<div class="label">Стоимость инвентаря</div>' +
     '<p style="color:var(--text2);font-size:13px;line-height:1.55;margin-top:8px">Привяжем твой игровой ник — и здесь появится живая стоимость твоего стэша с динамикой за 30 дней. Уже в разработке.</p></div>' +
-    '<div class="prem cut"><h4>ХАБАР PRO</h4>' +
+    '<div class="prem cut"><h4>[ ХАБАР PRO ]</h4>' +
     '<p>Безлимитные алерты по цене<br>Флип-финдер в реальном времени<br>История цен за 90 дней</p>' +
     '<div class="btn fill" style="display:block;margin-top:14px" id="probtn">Скоро · следи в боте</div></div>' +
     '<div class="label sect" style="margin-top:16px">В разработке</div>' +
@@ -896,6 +938,7 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
   b.classList.add('on');
   tab = b.dataset.tab;
+  view.classList.remove('fade'); void view.offsetWidth; view.classList.add('fade');
   if (tab === 'home') renderHome();
   else if (tab === 'market') renderMarket();
   else if (tab === 'flips') renderFlips();
