@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Хабар — цены Delta Force</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
     --page:#04090d; --app:#060E13; --edge:#1B2A33;
@@ -309,8 +308,24 @@
 <script>
 const API = 'https://api.deltaforceapi.com/deltaforceapi.gateway.v1.ApiService';
 const BOT_LINK = 'https://t.me/habar_price_bot';
-const tg = window.Telegram && window.Telegram.WebApp;
-if (tg) { try { tg.ready(); tg.expand(); tg.setHeaderColor('#0d0f12'); tg.setBackgroundColor('#08090b'); } catch(e){} }
+/* SDK Telegram грузим НЕблокирующе: приложение рисуется сразу,
+   даже если telegram.org недоступен — просто без телеграмных фишек. */
+let tg = null;
+(function initTelegram() {
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    tg = (window.Telegram && window.Telegram.WebApp) || null;
+    if (tg) { try { tg.ready(); tg.expand(); tg.setHeaderColor('#060E13'); tg.setBackgroundColor('#04090d'); } catch(e){} }
+  };
+  const s = document.createElement('script');
+  s.src = 'https://telegram.org/js/telegram-web-app.js';
+  s.async = true;
+  s.onload = finish; s.onerror = finish;
+  document.head.appendChild(s);
+  setTimeout(finish, 3000);
+})();
 
 const $ = s => document.querySelector(s);
 const view = $('#view');
