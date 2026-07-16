@@ -513,7 +513,13 @@ async function openItem(id) {
 
 function openBotLink(payload) {
   const url = BOT_LINK + '?start=' + payload;
-  if (tg && tg.openTelegramLink) { try { tg.openTelegramLink(url); return; } catch(e){} }
+  if (tg && tg.openTelegramLink) {
+    try {
+      tg.openTelegramLink(url);
+      setTimeout(() => { try { tg.close(); } catch(e){} }, 150);
+      return;
+    } catch(e){}
+  }
   window.open(url, '_blank');
 }
 
