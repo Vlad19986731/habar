@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Хабар — цены Delta Force</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --bg:#0e1621; --surface:#17212b; --surface2:#1c2836; --line:rgba(255,255,255,.06);
+    --text:#f1f5f9; --text2:#8796a5; --text3:#5f6f7f;
+    --blue:#64b1f4; --green:#57c25d; --red:#ef6a5e; --amber:#e8b04b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    font-size:14px; line-height:1.45; overflow-x:hidden;
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+  .num{font-variant-numeric:tabular-nums}
+  .up{color:var(--green)} .dn{color:var(--red)} .muted{color:var(--text2)}
+
+  header{
+    position:sticky; top:0; z-index:10; background:var(--bg);
+    padding:12px 14px 10px; display:flex; flex-direction:column; gap:10px;
+  }
+  .brand{display:flex; align-items:center; gap:10px}
+  .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#5a7d3a,#2e4a2a);display:flex;align-items:center;justify-content:center;font-size:17px;flex:none}
+  .brand b{font-size:16px;letter-spacing:-.01em}
+  .brand small{display:block;font-size:11.5px;color:var(--text2)}
+  .wipe{
+    margin-left:auto; font-size:11.5px; color:#eecf98; background:rgba(232,176,75,.1);
+    border:1px solid rgba(232,176,75,.22); padding:5px 10px; border-radius:9px; white-space:nowrap;
+  }
+  .search{
+    display:flex; align-items:center; gap:8px; background:var(--surface);
+    border-radius:11px; padding:9px 12px;
+  }
+  .search input{
+    flex:1; background:none; border:none; outline:none; color:var(--text);
+    font-size:14px; font-family:inherit;
+  }
+  .search input::placeholder{color:var(--text3)}
+
+  main{flex:1; padding:4px 12px 84px; display:flex; flex-direction:column; gap:8px}
+  .hint{color:var(--text3); font-size:12.5px; text-align:center; padding:22px 16px; line-height:1.6}
+
+  .row{
+    display:flex; align-items:center; gap:10px; background:var(--surface);
+    border-radius:12px; padding:9px 11px; cursor:pointer; border:none; width:100%;
+    color:var(--text); font-family:inherit; font-size:14px; text-align:left;
+  }
+  .row:active{background:var(--surface2)}
+  .ric{width:36px;height:36px;border-radius:9px;flex:none;background:linear-gradient(150deg,#28394a,#141f2b);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .ric img{width:100%;height:100%;object-fit:contain}
+  .rmain{flex:1;min-width:0}
+  .rmain b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+  .rmain span{display:block;font-size:11.5px;color:var(--text2);margin-top:1px}
+  .rprice{text-align:right;flex:none}
+  .rprice b{display:block;font-size:13.5px}
+  .rprice span{display:block;font-size:11.5px;margin-top:1px}
+
+  /* card */
+  .card{background:var(--surface); border-radius:14px; padding:14px}
+  .chead{display:flex; align-items:center; gap:10px; margin-bottom:10px}
+  .chead .ric{width:44px;height:44px}
+  .chead b{font-size:15.5px; letter-spacing:-.01em}
+  .price{font-size:26px; font-weight:800; letter-spacing:-.02em; margin:4px 0 2px}
+  .price small{font-size:13px; font-weight:600; color:var(--text2)}
+  .trend{display:flex; gap:14px; font-size:12.5px; margin:4px 0 10px}
+  canvas{width:100%; height:120px; display:block; margin:4px 0 8px}
+  .signal{
+    display:flex; gap:8px; align-items:flex-start; border-radius:10px; padding:8px 11px;
+    font-size:12.5px; line-height:1.4; margin-top:4px;
+    background:rgba(135,150,165,.08); border:1px solid var(--line);
+  }
+  .signal.good{background:rgba(87,194,93,.1); border-color:rgba(87,194,93,.25)}
+  .signal.bad{background:rgba(239,106,94,.09); border-color:rgba(239,106,94,.22)}
+  .src{font-size:11px; color:var(--text3); margin-top:10px}
+  .btns{display:flex; gap:8px; margin-top:12px}
+  .btn{
+    flex:1; border:none; border-radius:10px; padding:11px; font-size:13.5px; font-weight:700;
+    font-family:inherit; cursor:pointer; background:var(--surface2); color:var(--blue);
+  }
+  .btn.primary{background:var(--blue); color:#0e1621}
+  .btn:active{opacity:.8}
+  .back{
+    background:none; border:none; color:var(--blue); font-size:14px; font-family:inherit;
+    padding:6px 2px; cursor:pointer; align-self:flex-start; font-weight:600;
+  }
+
+  /* tabs */
+  nav{
+    position:fixed; bottom:0; left:0; right:0; display:flex;
+    background:var(--surface); padding:7px 6px calc(10px + env(safe-area-inset-bottom)); gap:2px;
+    border-top:1px solid var(--line);
+  }
+  .tab{
+    flex:1; background:none; border:none; text-align:center; font-size:10.5px;
+    color:var(--text3); display:flex; flex-direction:column; gap:3px; align-items:center;
+    font-family:inherit; cursor:pointer; padding:2px 0;
+  }
+  .tab i{font-style:normal; font-size:18px; line-height:1}
+  .tab.on{color:var(--blue)}
+  .spin{
+    width:22px;height:22px;border:2.5px solid var(--line);border-top-color:var(--blue);
+    border-radius:50%;margin:26px auto;animation:sp 0.8s linear infinite;
+  }
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .empty{color:var(--text3);text-align:center;padding:26px 16px;font-size:13px;line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="logo">🎯</span>
+    <span><b>Хабар</b><small>цены аукциона Delta Force</small></span>
+    <span class="wipe" id="wipe">⏳ …</span>
+  </div>
+  <div class="search" id="searchbox">
+    <span style="color:var(--text3)">⌕</span>
+    <input id="q" type="search" placeholder="Поиск: вектор, дигл, helmet…" autocomplete="off">
+  </div>
+</header>
+<main id="view"></main>
+<nav>
+  <button class="tab on" data-tab="market"><i>📈</i>Рынок</button>
+  <button class="tab" data-tab="watch"><i>⭐</i>Вотчлист</button>
+  <button class="tab" data-tab="info"><i>ℹ️</i>Инфо</button>
+</nav>
+
+<script>
+const API = 'https://api.deltaforceapi.com/deltaforceapi.gateway.v1.ApiService';
+const tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+const $ = s => document.querySelector(s);
+const view = $('#view');
+const fmt = n => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+const ALIASES = {
+  'дигл':'desert eagle','деагл':'desert eagle','вектор':'vector','м4':'m4','ак':'ak',
+  'глок':'glock','узи':'uzi','мп5':'mp5','мп7':'mp7','п90':'p90','авм':'awm',
+  'шлем':'helmet','каска':'helmet','броня':'armor','бронежилет':'armor','жилет':'vest',
+  'разгрузка':'rig','рюкзак':'backpack','ключ':'key','карта':'keycard','аптечка':'first aid',
+  'стим':'stim','патроны':'ammo','глушитель':'suppressor','прицел':'scope','ствол':'barrel',
+  'приклад':'stock','магазин':'mag','золотые':'gold','сердце африки':'heart of africa'
+};
+const TR = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'i','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'c','ч':'ch','ш':'sh','щ':'sh','ъ':'','ы':'y','ь':'','э':'e','ю':'u','я':'ya'};
+const translit = s => [...s].map(c => TR[c] ?? c).join('');
+
+async function api(method, payload) {
+  const r = await fetch(`${API}/${method}`, {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload||{})
+  });
+  if (!r.ok) throw new Error(method + ' ' + r.status);
+  return r.json();
+}
+
+/* ---------- каталог (кэш на сутки) ---------- */
+let CATALOG = [];
+async function loadCatalog() {
+  try {
+    const c = JSON.parse(localStorage.getItem('cat_v1') || 'null');
+    if (c && Date.now() - c.ts < 864e5 && c.items.length) { CATALOG = c.items; return; }
+  } catch(e){}
+  let items = [], token = null;
+  do {
+    const p = token ? {pageSize:100, pageToken:token} : {pageSize:100};
+    const d = await api('ListAuctionItems', p);
+    items = items.concat(d.items || []);
+    token = d.nextPageToken;
+  } while (token);
+  CATALOG = items.map(i => ({id:i.id, name:i.name, icon:i.iconUrl, lc:i.name.toLowerCase()}));
+  localStorage.setItem('cat_v1', JSON.stringify({ts:Date.now(), items:CATALOG}));
+}
+
+function searchCatalog(q) {
+  q = q.trim().toLowerCase();
+  if (q.length < 2) return [];
+  const variants = [q];
+  if (ALIASES[q]) variants.push(ALIASES[q]);
+  for (const [ru,en] of Object.entries(ALIASES)) if (q.includes(ru)) variants.push(q.replace(ru,en));
+  const t = translit(q); if (t !== q) variants.push(t);
+  const seen = new Set(), out = [];
+  for (const v of variants) for (const it of CATALOG) {
+    if (it.lc.includes(v) && !seen.has(it.id)) { seen.add(it.id); out.push(it); if (out.length >= 30) return out; }
+  }
+  return out;
+}
+
+/* ---------- вотчлист (Telegram CloudStorage → fallback localStorage) ---------- */
+function cloudOk() {
+  try { return !!(tg && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast('6.9')); }
+  catch(e) { return false; }
+}
+function wlGet() {
+  return new Promise(res => {
+    const local = () => res(JSON.parse(localStorage.getItem('wl') || '[]'));
+    if (!cloudOk()) return local();
+    try { tg.CloudStorage.getItem('wl', (e,v) => (e || !v) ? local() : res(JSON.parse(v))); }
+    catch(err) { local(); }
+  });
+}
+function wlSet(list) {
+  const v = JSON.stringify(list);
+  localStorage.setItem('wl', v);
+  if (cloudOk()) { try { tg.CloudStorage.setItem('wl', v, ()=>{}); } catch(e){} }
+}
+
+/* ---------- экраны ---------- */
+let tab = 'market', lastResults = [], history = [];
+
+function renderMarket() {
+  if (!CATALOG.length) { view.innerHTML = '<div class="spin"></div>'; return; }
+  if (lastResults.length) { renderRows(lastResults); return; }
+  const recent = JSON.parse(localStorage.getItem('recent') || '[]');
+  if (recent.length) {
+    view.innerHTML = '<div class="hint" style="padding:8px 4px 2px;text-align:left">Недавние:</div>';
+    renderRows(recent.map(id => CATALOG.find(i => i.id === id)).filter(Boolean), true);
+  } else {
+    view.innerHTML = `<div class="hint">В базе <b>${CATALOG.length}</b> предметов аукциона.<br>
+      Начни печатать в поиске: <b>вектор</b>, <b>дигл</b>, <b>gold</b>, <b>helmet</b>…</div>`;
+  }
+}
+
+function renderRows(items, append) {
+  const html = items.map(it => `
+    <button class="row" data-id="${it.id}">
+      <span class="ric"><img loading="lazy" src="${it.icon}" alt="" onerror="this.remove()"></span>
+      <span class="rmain"><b>${it.name}</b></span>
+      <span style="color:var(--text3)">›</span>
+    </button>`).join('');
+  if (append) view.insertAdjacentHTML('beforeend', html);
+  else view.innerHTML = html;
+}
+
+/* делегирование кликов: живёт один раз, не зависит от перерисовок */
+view.addEventListener('click', e => {
+  const row = e.target.closest('.row');
+  if (row && row.dataset.id) openItem(row.dataset.id);
+});
+
+async function openItem(id) {
+  const it = CATALOG.find(i => i.id === id);
+  if (!it) return;
+  const recent = JSON.parse(localStorage.getItem('recent') || '[]').filter(x => x !== id);
+  recent.unshift(id); localStorage.setItem('recent', JSON.stringify(recent.slice(0,10)));
+
+  view.innerHTML = '<button class="back" id="bk">‹ Назад</button><div class="spin"></div>';
+  $('#bk').onclick = () => { tab==='watch' ? renderWatch() : renderMarket(); };
+
+  let priceD, series;
+  try {
+    [priceD, series] = await Promise.all([
+      api('GetAuctionItemPrice', {auctionItemId:id}),
+      api('GetAuctionItemPriceSeries', {auctionItemId:id, startTime: new Date(Date.now()-7*864e5).toISOString().slice(0,13)+':00:00Z'})
+    ]);
+  } catch(e) {
+    view.innerHTML = '<button class="back" id="bk">‹ Назад</button><div class="empty">Не удалось получить цену 😕<br>Попробуй ещё раз.</div>';
+    $('#bk').onclick = () => renderMarket();
+    return;
+  }
+  const p = priceD.price || {};
+  const avgs = (series.prices || []).map(x => x.priceAvg).filter(Boolean);
+  const price = p.price || 0;
+
+  let d24 = null, d7 = null;
+  if (avgs.length >= 25) d24 = (price - avgs[avgs.length-25]) / avgs[avgs.length-25] * 100;
+  if (avgs.length > 1)  d7  = (price - avgs[0]) / avgs[0] * 100;
+  const avg7 = avgs.length ? avgs.reduce((a,b)=>a+b,0)/avgs.length : 0;
+  const dev = avg7 ? (price - avg7)/avg7*100 : 0;
+
+  let sigCls = '', sigTxt = '⚪️ Около средней за 7 дней';
+  if (dev <= -5) { sigCls = 'good'; sigTxt = `🟢 Ниже средней за 7д на ${Math.abs(dev).toFixed(0)}% — возможная точка входа`; }
+  else if (dev >= 5) { sigCls = 'bad'; sigTxt = `🔴 Выше средней за 7д на ${dev.toFixed(0)}% — дорого`; }
+
+  const wl = await wlGet();
+  const inWl = wl.includes(id);
+
+  view.innerHTML = `
+    <button class="back" id="bk">‹ Назад</button>
+    <div class="card">
+      <div class="chead">
+        <span class="ric"><img src="${it.icon}" alt="" onerror="this.remove()"></span>
+        <div><b>${it.name}</b></div>
+      </div>
+      <div class="price num">${fmt(price)}<small> ₮</small></div>
+      ${p.referencePrice ? `<div class="muted num" style="font-size:12.5px">🏷 Референс: ${fmt(p.referencePrice)}</div>` : ''}
+      <div class="trend num">
+        ${d24 !== null ? `<span class="${d24>=0?'up':'dn'}">${d24>=0?'▲':'▼'} 24ч ${d24>=0?'+':''}${d24.toFixed(1)}%</span>` : ''}
+        ${d7  !== null ? `<span class="${d7>=0?'up':'dn'}">${d7>=0?'▲':'▼'} 7д ${d7>=0?'+':''}${d7.toFixed(1)}%</span>` : ''}
+      </div>
+      <canvas id="ch" width="640" height="240"></canvas>
+      <div class="signal ${sigCls}">${sigTxt}</div>
+      <div class="btns">
+        <button class="btn primary" id="wlbtn">${inWl ? '✅ В вотчлисте' : '⭐ В вотчлист'}</button>
+      </div>
+      <div class="src">Аукцион · глобал · ${new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'})} · данные deltaforceapi.com</div>
+    </div>`;
+  $('#bk').onclick = () => { lastResults.length ? renderRows(lastResults) : renderMarket(); };
+  $('#wlbtn').onclick = async () => {
+    let w = await wlGet();
+    if (w.includes(id)) w = w.filter(x => x !== id); else w.push(id);
+    wlSet(w);
+    $('#wlbtn').textContent = w.includes(id) ? '✅ В вотчлисте' : '⭐ В вотчлист';
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+  };
+  if (avgs.length > 1) drawChart($('#ch'), avgs);
+}
+
+function drawChart(cv, data) {
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height, pad = 8;
+  const lo = Math.min(...data), hi = Math.max(...data);
+  const x = i => pad + i * (W - 2*pad) / (data.length - 1);
+  const y = v => hi === lo ? H/2 : pad + (hi - v) * (H - 2*pad) / (hi - lo);
+  const up = data[data.length-1] >= data[0];
+  const col = up ? '#57c25d' : '#ef6a5e';
+  ctx.clearRect(0,0,W,H);
+  ctx.beginPath();
+  data.forEach((v,i) => i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)));
+  ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.lineTo(x(data.length-1), H); ctx.lineTo(x(0), H); ctx.closePath();
+  ctx.fillStyle = up ? 'rgba(87,194,93,.10)' : 'rgba(239,106,94,.10)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(x(data.length-1), y(data[data.length-1]), 5, 0, 7);
+  ctx.fillStyle = col; ctx.fill();
+}
+
+async function renderWatch() {
+  const wl = await wlGet();
+  if (!wl.length) { view.innerHTML = '<div class="empty">Вотчлист пуст.<br>Открой предмет и нажми «⭐ В вотчлист».</div>'; return; }
+  view.innerHTML = '<div class="spin"></div>';
+  let html = '';
+  for (const id of wl) {
+    const it = CATALOG.find(i => i.id === id);
+    if (!it) continue;
+    let ptxt = '—';
+    try { const d = await api('GetAuctionItemPrice', {auctionItemId:id}); ptxt = fmt(d.price.price); } catch(e){}
+    html += `
+      <button class="row" data-id="${id}">
+        <span class="ric"><img loading="lazy" src="${it.icon}" alt="" onerror="this.remove()"></span>
+        <span class="rmain"><b>${it.name}</b></span>
+        <span class="rprice"><b class="num">${ptxt}</b></span>
+      </button>`;
+  }
+  view.innerHTML = html || '<div class="empty">Вотчлист пуст.</div>';
+}
+
+function renderInfo() {
+  view.innerHTML = `
+    <div class="card" style="font-size:13px; line-height:1.65">
+      <b style="font-size:15px">🎯 Хабар</b>
+      <p class="muted" style="margin-top:8px">Живые цены аукциона Delta Force (режим Operations). Данные — открытый API deltaforceapi.com, глобальный сервер (тот же, где играет РФ).</p>
+      <p class="muted" style="margin-top:8px">🔔 <b style="color:var(--text)">Алерты по цене</b> — в чат-боте: открой @habar_price_bot, найди предмет и нажми «Алерт». Бот напишет, когда цена дойдёт до порога.</p>
+      <p class="muted" style="margin-top:8px">⭐ Вотчлист синхронизируется через Telegram.</p>
+      <p style="margin-top:10px; font-size:11.5px; color:var(--text3)">Не аффилирован с TiMi Studios / Tencent. Цены информационные.</p>
+    </div>`;
+}
+
+/* ---------- события ---------- */
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  tab = b.dataset.tab;
+  lastResults = [];
+  $('#q').value = '';
+  if (tab === 'market') renderMarket();
+  else if (tab === 'watch') renderWatch();
+  else renderInfo();
+});
+
+let debounce;
+$('#q').addEventListener('input', e => {
+  clearTimeout(debounce);
+  debounce = setTimeout(() => {
+    const q = e.target.value;
+    if (tab !== 'market') { tab = 'market';
+      document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.dataset.tab==='market')); }
+    lastResults = searchCatalog(q);
+    if (q.trim().length < 2) renderMarket();
+    else if (!lastResults.length) view.innerHTML = '<div class="empty">Ничего не нашёл 😕<br>Попробуй по-английски или короче.</div>';
+    else renderRows(lastResults);
+  }, 200);
+});
+
+/* ---------- старт ---------- */
+(async function init() {
+  view.innerHTML = '<div class="spin"></div>';
+  api('GetSeasonCurrent').then(d => {
+    const s = d.season;
+    const days = Math.max(0, Math.ceil((new Date(s.endedAt) - Date.now()) / 864e5));
+    $('#wipe').textContent = `⏳ вайп через ${days} дн.`;
+    $('#wipe').title = `Сезон ${s.number} «${s.name}»`;
+  }).catch(()=>{ $('#wipe').style.display = 'none'; });
+  try { await loadCatalog(); } catch(e) {
+    view.innerHTML = '<div class="empty">Не удалось загрузить каталог 😕<br>Проверь интернет и обнови страницу.</div>';
+    return;
+  }
+  renderMarket();
+})();
+</script>
+</body>
+</html>
