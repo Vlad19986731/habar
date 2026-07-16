@@ -478,6 +478,41 @@ def _steam_img(contents: str) -> str:
     return m.group(1).replace("{STEAM_CLAN_IMAGE}", "https://clan.akamai.steamstatic.com/images")
 
 
+def _clean_steam_body(contents: str) -> str:
+    """BBCode/HTML новости Steam -> чистый текст с абзацами."""
+    t = contents or ""
+    t = re.sub(r"\[img\][^\[]*\[/img\]", "", t, flags=re.I)
+    t = re.sub(r"\[previewyoutube[^\]]*\].*?\[/previewyoutube\]", "", t, flags=re.S | re.I)
+    t = re.sub(r"\[url=[^\]]*\]", "", t, flags=re.I).replace("[/url]", "")
+    t = t.replace("[*]", "\n• ")
+    t = re.sub(r"\[/?[a-zA-Z][^\]]*\]", "\n", t)
+    t = re.sub(r"<br\s*/?>", "\n", t, flags=re.I)
+    t = re.sub(r"<[^>]+>", "", t)
+    t = html_mod.unescape(t)
+    t = t.replace("<", "").replace(">", "")
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r"\n\s*\n\s*\n+", "\n\n", t)
+    return t.strip()[:6000]
+
+
+async def _translate_long_en_ru(text: str) -> str:
+    """Перевод длинного текста кусками (по абзацам, до ~1500 символов)."""
+    chunks, buf = [], ""
+    for p in text.split("\n"):
+        if len(buf) + len(p) > 1500 and buf:
+            chunks.append(buf)
+            buf = p
+        else:
+            buf = (buf + "\n" + p) if buf else p
+    if buf:
+        chunks.append(buf)
+    out = []
+    for ch in chunks:
+        out.append(await _translate_en_ru(ch))
+        await asyncio.sleep(0.2)
+    return "\n".join(out)
+
+
 def _parse_tg_posts(page: str, channel_limit: int = 6) -> list[dict]:
     """Последние посты публичного TG-канала из превью-страницы t.me/s/..."""
     posts = []
@@ -515,33 +550,29 @@ async def refresh_news():
     GitHub Pages раздаёт файл приложению (обход CORS без своего сервера).
     """
     try:
-        steam, ru = [], []
+        steam = []
         try:
             r = await api._client.get(STEAM_NEWS_URL, params={"appid": 2507950, "count": 8})
             r.raise_for_status()
             for i in r.json()["appnews"]["newsitems"]:
+                body = _clean_steam_body(i.get("contents", ""))
                 steam.append({
                     "title": i["title"],
                     "title_ru": await _translate_en_ru(i["title"]),
                     "url": i["url"],
                     "date": i["date"],
                     "img": _steam_img(i.get("contents", "")),
+                    "body_ru": await _translate_long_en_ru(body) if body else "",
                 })
         except Exception:
             log.exception("Steam-новости недоступны")
-        try:
-            r = await api._client.get(TG_NEWS_URL, headers={"User-Agent": "Mozilla/5.0"})
-            r.raise_for_status()
-            ru = _parse_tg_posts(r.text)
-        except Exception:
-            log.exception("TG-новости недоступны")
-        if not steam and not ru:
+        if not steam:
             return
-        news = {"ru": ru, "steam": steam}
+        news = {"steam": steam}
         if NEWS_PATH.exists():
             try:
                 old = json.loads(NEWS_PATH.read_text(encoding="utf-8"))
-                if {"ru": old.get("ru"), "steam": old.get("steam")} == news:
+                if old.get("steam") == steam:
                     return  # ничего нового
             except Exception:
                 pass
@@ -555,7 +586,7 @@ async def refresh_news():
             res = subprocess.run(cmd, cwd=str(REPO_DIR), capture_output=True, timeout=120)
             if res.returncode != 0 and cmd[1] != "commit":
                 log.warning("git %s: %s", cmd[1], res.stderr.decode(errors="ignore")[:200])
-        log.info("Новости обновлены: ru=%s, steam=%s", len(ru), len(steam))
+        log.info("Новости обновлены: steam=%s", len(steam))
     except Exception:
         log.exception("Не удалось обновить новости")
 

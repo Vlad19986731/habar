@@ -667,9 +667,7 @@ async function renderHome() {
   view.innerHTML =
     '<div class="brandrow"><div class="brand">ХАБАР<span>₮</span></div></div>' +
     '<div id="seasoncard" class="card cut" style="margin-top:14px"><div class="strip"></div><div class="spin" style="margin:12px auto"></div></div>' +
-    '<div class="label sect">Новости на русском</div>' +
-    '<div class="nstack" id="runews"><div class="spin"></div></div>' +
-    '<div class="label sect">Патчи и обновления</div>' +
+    '<div class="label sect">Новости и обновления</div>' +
     '<div class="nstack" id="newslist"><div class="spin"></div></div>' +
     '<div class="label sect">Сообщество</div>' +
     '<div class="btns">' +
@@ -702,27 +700,53 @@ async function renderHome() {
     if (el) el.innerHTML = '<div class="hint">Данные сезона недоступны</div>';
   }
 
-  const newsRow = n =>
-    '<button class="ncard" data-url="' + String(n.url).replace(/"/g, '&quot;') + '">' +
+  const newsRow = (n, i) =>
+    '<button class="ncard" data-nidx="' + i + '">' +
     (n.img ? '<span class="ncover"><img loading="lazy" src="' + n.img + '" alt="" onerror="this.parentNode.remove()"></span>' : '') +
     '<span class="nbody"><b>' + (n.title_ru || n.title) + '</b>' +
     (n.date ? '<span>' + new Date(n.date * 1000).toLocaleDateString('ru') + '</span>' : '') +
     '</span></button>';
-  const fillNews = (elId, items, emptyText) => {
-    const el = document.getElementById(elId);
-    if (!el) return;
-    el.innerHTML = (items && items.length) ? items.slice(0, 5).map(newsRow).join('')
-      : '<div class="hint">' + emptyText + '</div>';
-  };
   try {
     const r = await fetch('news.json?_=' + Date.now());
     const data = await r.json();
-    fillNews('runews', data.ru || [], 'Скоро подключим 😉');
-    fillNews('newslist', data.steam || data.items || [], 'Новостей пока нет');
+    NEWS = data.steam || [];
+    const el = document.getElementById('newslist');
+    if (el) el.innerHTML = NEWS.length ? NEWS.slice(0, 6).map(newsRow).join('')
+      : '<div class="hint">Новостей пока нет</div>';
   } catch(e) {
-    fillNews('runews', [], 'Не удалось загрузить');
-    fillNews('newslist', [], 'Не удалось загрузить');
+    const el = document.getElementById('newslist');
+    if (el) el.innerHTML = '<div class="hint">Не удалось загрузить новости</div>';
   }
+}
+
+let NEWS = [];
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function renderArticle(i) {
+  const n = NEWS[i];
+  if (!n) return;
+  const paras = (n.body_ru || '').split('\n').map(s => s.trim()).filter(Boolean);
+  view.innerHTML =
+    '<button class="back" id="bk">' +
+    '<svg viewBox="0 0 20 20" style="width:16px;height:16px"><polyline points="12,4 6,10 12,16" fill="none" stroke="#ff9f2e" stroke-width="2.5"/></svg>' +
+    'К новостям</button>' +
+    '<div class="card cut" style="margin-top:6px;padding:0">' +
+      '<div class="strip" style="z-index:2"></div>' +
+      (n.img ? '<span class="ncover"><img src="' + n.img + '" alt="" onerror="this.parentNode.remove()"></span>' : '') +
+      '<div style="padding:14px 16px 16px">' +
+        '<div class="label">' + (n.date ? new Date(n.date * 1000).toLocaleDateString('ru') : '') + ' · Delta Force</div>' +
+        '<div style="font-size:16px;font-weight:800;line-height:1.35;margin-top:6px">' + esc(n.title_ru || n.title) + '</div>' +
+        '<div style="margin-top:12px;color:#c8ccd2;font-size:13.5px;line-height:1.7">' +
+          (paras.length ? paras.map(p => '<p style="margin:0 0 10px">' + esc(p) + '</p>').join('') :
+            '<p>Текст недоступен — открой оригинал.</p>') +
+        '</div>' +
+        '<div class="btns" style="margin-top:6px"><button class="btn" id="orig">Открыть оригинал</button></div>' +
+        '<div class="src">Перевод автоматический · источник: Steam</div>' +
+      '</div>' +
+    '</div>';
+  $('#bk').onclick = renderHome;
+  $('#orig').onclick = () => openExternal(n.url);
+  view.scrollTop = 0; window.scrollTo(0, 0);
 }
 
 function openExternal(url) {
@@ -762,6 +786,7 @@ view.addEventListener('click', e => {
   if (rm) { handleRemoveFav(rm.dataset.rm); return; }
   const row = e.target.closest('.row,.ncard');
   if (!row) return;
+  if (row.dataset.nidx !== undefined) { renderArticle(+row.dataset.nidx); return; }
   if (row.dataset.url) { openExternal(row.dataset.url); return; }
   if (row.dataset.id) openItem(row.dataset.id);
 });
