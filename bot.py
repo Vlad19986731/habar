@@ -4,8 +4,10 @@
 Требует: .env с BOT_TOKEN=...
 """
 import asyncio
+import html as html_mod
 import json
 import logging
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -435,24 +437,70 @@ NEWS_PATH = REPO_DIR / "docs" / "news.json"
 STEAM_NEWS_URL = "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
 
 
+TG_NEWS_URL = "https://t.me/s/deltaforce_ru"
+
+
+def _parse_tg_posts(page: str, channel_limit: int = 6) -> list[dict]:
+    """Последние посты публичного TG-канала из превью-страницы t.me/s/..."""
+    posts = []
+    for block in page.split("tgme_widget_message_wrap")[1:]:
+        m_post = re.search(r'data-post="([^"]+)"', block)
+        m_text = re.search(r'tgme_widget_message_text[^>]*>(.*?)</div>', block, re.S)
+        m_time = re.search(r'<time datetime="([^"]+)"', block)
+        if not (m_post and m_text):
+            continue
+        text = re.sub(r"<br/?>", " ", m_text.group(1))
+        text = re.sub(r"<[^>]+>", "", text)
+        text = html_mod.unescape(text)
+        text = re.sub(r"\s+", " ", text).strip()
+        for cut in ("🦾", "💎", "💙"):  # рекламный футер канала
+            i = text.find(cut)
+            if i > 20:
+                text = text[:i].strip()
+        if len(text) < 15:
+            continue
+        ts = 0
+        if m_time:
+            try:
+                ts = int(datetime.fromisoformat(m_time.group(1).replace("Z", "+00:00")).timestamp())
+            except ValueError:
+                pass
+        posts.append({"title": text[:150], "url": f"https://t.me/{m_post.group(1)}", "date": ts})
+    return posts[-channel_limit:][::-1]  # свежие сверху
+
+
 async def refresh_news():
-    """Каждые 6 часов: новости Delta Force из Steam -> docs/news.json -> git push.
+    """Каждые 6 часов: Steam-патчи + RU-канал -> docs/news.json -> git push.
 
     GitHub Pages раздаёт файл приложению (обход CORS без своего сервера).
     """
     try:
-        r = await api._client.get(STEAM_NEWS_URL, params={"appid": 2507950, "count": 8, "maxlength": 250})
-        r.raise_for_status()
-        items = r.json()["appnews"]["newsitems"]
-        news = [{"title": i["title"], "url": i["url"], "date": i["date"], "label": i.get("feedlabel", "")} for i in items]
+        steam, ru = [], []
+        try:
+            r = await api._client.get(STEAM_NEWS_URL, params={"appid": 2507950, "count": 8, "maxlength": 250})
+            r.raise_for_status()
+            steam = [{"title": i["title"], "url": i["url"], "date": i["date"]}
+                     for i in r.json()["appnews"]["newsitems"]]
+        except Exception:
+            log.exception("Steam-новости недоступны")
+        try:
+            r = await api._client.get(TG_NEWS_URL, headers={"User-Agent": "Mozilla/5.0"})
+            r.raise_for_status()
+            ru = _parse_tg_posts(r.text)
+        except Exception:
+            log.exception("TG-новости недоступны")
+        if not steam and not ru:
+            return
+        news = {"ru": ru, "steam": steam}
         if NEWS_PATH.exists():
             try:
-                if json.loads(NEWS_PATH.read_text(encoding="utf-8")).get("items") == news:
+                old = json.loads(NEWS_PATH.read_text(encoding="utf-8"))
+                if {"ru": old.get("ru"), "steam": old.get("steam")} == news:
                     return  # ничего нового
             except Exception:
                 pass
         NEWS_PATH.write_text(
-            json.dumps({"updated": datetime.now(timezone.utc).isoformat(), "items": news}, ensure_ascii=False, indent=1),
+            json.dumps({"updated": datetime.now(timezone.utc).isoformat(), **news}, ensure_ascii=False, indent=1),
             encoding="utf-8",
         )
         for cmd in (["git", "add", "docs/news.json"],
@@ -461,7 +509,7 @@ async def refresh_news():
             res = subprocess.run(cmd, cwd=str(REPO_DIR), capture_output=True, timeout=120)
             if res.returncode != 0 and cmd[1] != "commit":
                 log.warning("git %s: %s", cmd[1], res.stderr.decode(errors="ignore")[:200])
-        log.info("Новости обновлены: %s шт.", len(news))
+        log.info("Новости обновлены: ru=%s, steam=%s", len(ru), len(steam))
     except Exception:
         log.exception("Не удалось обновить новости")
 
@@ -514,6 +562,8 @@ async def main():
     if await db.items_count() == 0:
         log.info("Первый запуск: загружаю справочник предметов (может занять минуту)...")
         await refresh_items()
+
+    await refresh_news()  # свежие новости при каждом старте
 
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(refresh_items, "interval", hours=24)

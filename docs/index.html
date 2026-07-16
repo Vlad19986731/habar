@@ -653,7 +653,9 @@ async function renderHome() {
   view.innerHTML =
     '<div class="brandrow"><div class="brand">ХАБАР<span>₮</span></div></div>' +
     '<div id="seasoncard" class="card cut" style="margin-top:14px"><div class="strip"></div><div class="spin" style="margin:12px auto"></div></div>' +
-    '<div class="label sect">Новости и патчи</div>' +
+    '<div class="label sect">Новости на русском</div>' +
+    '<div class="list" id="runews"><div class="spin"></div></div>' +
+    '<div class="label sect">Патчи и обновления</div>' +
     '<div class="list" id="newslist"><div class="spin"></div></div>' +
     '<div class="label sect">Сообщество</div>' +
     '<div class="btns">' +
@@ -686,20 +688,25 @@ async function renderHome() {
     if (el) el.innerHTML = '<div class="hint">Данные сезона недоступны</div>';
   }
 
+  const newsRow = n =>
+    '<button class="row" data-url="' + String(n.url).replace(/"/g, '&quot;') + '" style="min-height:auto;padding:11px 12px">' +
+    '<span class="rmain"><b style="white-space:normal;font-size:13px;line-height:1.35">' + n.title + '</b>' +
+    (n.date ? '<span>' + new Date(n.date * 1000).toLocaleDateString('ru') + '</span>' : '') + '</span>' +
+    '<span style="color:var(--text3)">›</span></button>';
+  const fillNews = (elId, items, emptyText) => {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.innerHTML = (items && items.length) ? items.slice(0, 6).map(newsRow).join('')
+      : '<div class="hint">' + emptyText + '</div>';
+  };
   try {
     const r = await fetch('news.json?_=' + Date.now());
     const data = await r.json();
-    const nl = document.getElementById('newslist');
-    if (nl && data.items && data.items.length) {
-      nl.innerHTML = data.items.slice(0, 8).map(n =>
-        '<button class="row" data-url="' + String(n.url).replace(/"/g, '&quot;') + '" style="min-height:auto;padding:11px 12px">' +
-        '<span class="rmain"><b style="white-space:normal;font-size:13px;line-height:1.35">' + n.title + '</b>' +
-        '<span>' + new Date(n.date * 1000).toLocaleDateString('ru') + '</span></span>' +
-        '<span style="color:var(--text3)">›</span></button>').join('');
-    } else if (nl) nl.innerHTML = '<div class="hint">Новостей пока нет</div>';
+    fillNews('runews', data.ru || [], 'Скоро подключим 😉');
+    fillNews('newslist', data.steam || data.items || [], 'Новостей пока нет');
   } catch(e) {
-    const nl = document.getElementById('newslist');
-    if (nl) nl.innerHTML = '<div class="hint">Не удалось загрузить новости</div>';
+    fillNews('runews', [], 'Не удалось загрузить');
+    fillNews('newslist', [], 'Не удалось загрузить');
   }
 }
 
