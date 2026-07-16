@@ -207,8 +207,8 @@
       <div>Крафт</div>
     </button>
     <button class="tab" data-tab="stash">
-      <svg viewBox="0 0 20 20" fill="currentColor"><rect x="3" y="3.5" width="14" height="3"/><rect x="3" y="8" width="14" height="9" rx="1"/></svg>
-      <div>Стэш</div>
+      <svg viewBox="0 0 20 20" fill="currentColor"><polygon points="10,1.5 12.6,7 18.5,7.8 14.2,11.9 15.2,17.7 10,14.9 4.8,17.7 5.8,11.9 1.5,7.8 7.4,7"/></svg>
+      <div>Избранное</div>
     </button>
     <button class="tab" data-tab="more">
       <svg viewBox="0 0 20 20" fill="currentColor"><circle cx="4" cy="10" r="2"/><circle cx="10" cy="10" r="2"/><circle cx="16" cy="10" r="2"/></svg>
@@ -324,11 +324,22 @@ function miniSvg(values, color) {
   return '<svg viewBox="0 0 56 20" class="rspark"><polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="1.5"/></svg>';
 }
 
+/* ---------- мои уведомления (локально) ---------- */
+function alGetAll() {
+  try { return JSON.parse(localStorage.getItem('myalerts') || '{}'); } catch(e) { return {}; }
+}
+function alAdd(id, dir, thr) {
+  const a = alGetAll();
+  (a[id] = a[id] || []).push({d: dir, t: thr});
+  localStorage.setItem('myalerts', JSON.stringify(a));
+}
+
 /* ---------- строки списка ---------- */
 function rowHtml(it) {
+  const bell = alGetAll()[it.id] ? ' <span style="color:var(--orange)">🔔</span>' : '';
   return '<button class="row" data-id="' + it.id + '">' +
     '<span class="well"><span class="ab">' + abbr(it.name) + '</span><img loading="lazy" src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
-    '<span class="rmain"><b>' + it.name + '</b><span id="sub-' + it.id + '">…</span></span>' +
+    '<span class="rmain"><b>' + it.name + bell + '</b><span id="sub-' + it.id + '">…</span></span>' +
     '<span id="spark-' + it.id + '"></span>' +
     '<span class="rprice"><b class="num" id="p-' + it.id + '">·····</b><span class="num" id="d-' + it.id + '"></span></span>' +
     '</button>';
@@ -487,6 +498,8 @@ async function openItem(id) {
     chartSvg(avgs) +
     '<div class="chart-meta"><span>' + (p.referencePrice ? 'РЕФ. ЦЕНА ' + fmt(p.referencePrice) : '') + '</span><span>7 ДНЕЙ</span></div>' +
     '<div class="signal" style="background:' + sigBg + '"><i style="background:' + sigDot + '"></i><b style="color:' + sigC + '">' + sigTxt + '</b></div>' +
+    ((alGetAll()[id] || []).length ? '<div class="src" style="color:var(--orange);margin-top:8px">🔔 Слежу: ' +
+      alGetAll()[id].map(a => (a.d === 'd' ? 'подешевеет до ' : 'подорожает до ') + fmt(a.t) + ' ₮').join(' · ') + '</div>' : '') +
     '<div class="btns">' +
       '<button class="btn ' + (inWl?'fill':'') + '" id="wlbtn">' + (inWl ? '✓ В избранном' : '⭐ В избранное') + '</button>' +
     '</div>' +
@@ -529,13 +542,20 @@ function showAlertPicker(id, dir, price) {
       '<button class="btn" id="alok" style="flex:0 0 84px">OK</button>' +
     '</div>' +
     '<div class="hint" style="padding:8px 4px 0;text-align:left">Подтверждение придёт в чат с ботом — туда же прилетит пуш, когда цена дойдёт до порога.</div>';
-  document.getElementById('alp1').onclick = () => openBotLink('al_' + dir + '_' + id + '_' + t1);
-  document.getElementById('alp2').onclick = () => openBotLink('al_' + dir + '_' + id + '_' + t2);
+  document.getElementById('alp1').onclick = () => pickAlert(id, dir, t1);
+  document.getElementById('alp2').onclick = () => pickAlert(id, dir, t2);
   document.getElementById('alok').onclick = () => {
     const v = parseInt((document.getElementById('alcustom').value || '').replace(/\D/g, ''), 10);
-    if (v > 0) openBotLink('al_' + dir + '_' + id + '_' + v);
+    if (v > 0) pickAlert(id, dir, v);
   };
   box.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+async function pickAlert(id, dir, thr) {
+  let w = await wlGet();
+  if (!w.includes(id)) { w.push(id); wlSet(w); }   // слежу за ценой = в избранном
+  alAdd(id, dir, thr);
+  openBotLink('al_' + dir + '_' + id + '_' + thr);
 }
 
 function openBotLink(payload) {
@@ -557,7 +577,7 @@ function openBot() {
 
 async function renderStash() {
   const wl = await wlGet();
-  const head = '<div class="h1">Стэш</div><div class="sub">Избранное · ' + wl.length + ' предм.</div>';
+  const head = '<div class="h1">Избранное</div><div class="sub">' + wl.length + ' предм. · 🔔 — слежу за ценой</div>';
   if (!wl.length) {
     view.innerHTML = head + '<div class="hint" style="margin-top:20px">Пусто.<br>Открой предмет на «Рынке» и нажми «⭐ В избранное».</div>';
     return;

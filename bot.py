@@ -155,9 +155,11 @@ async def cmd_start(m: Message, command: CommandObject):
                 if item:
                     threshold = float(parts[3])
                     await db.alert_add(m.from_user.id, item_id, direction, threshold)
+                    await db.watch_add(m.from_user.id, item_id)
                     word = "подешевеет до" if direction == "below" else "подорожает до"
                     await m.answer(
                         f"✅ Принято! Сообщу, когда <b>{item[1]}</b> {word} <b>{fmt(threshold)} ₮</b>.\n"
+                        f"⭐ Предмет добавлен в избранное.\n"
                         f"<i>Пуш придёт прямо сюда. Твои уведомления: /alerts</i>"
                     )
                     return
@@ -231,9 +233,13 @@ async def alert_threshold(m: Message, state: FSMContext):
     data = await state.get_data()
     direction = data.get("direction", "below")
     await db.alert_add(m.from_user.id, data["item_id"], direction, threshold)
+    await db.watch_add(m.from_user.id, data["item_id"])
     await state.clear()
     word = "подешевеет до" if direction == "below" else "подорожает до"
-    await m.answer(f"✅ Принято! Сообщу, когда <b>{data['item_name']}</b> {word} <b>{fmt(threshold)} ₮</b>.")
+    await m.answer(
+        f"✅ Принято! Сообщу, когда <b>{data['item_name']}</b> {word} <b>{fmt(threshold)} ₮</b>.\n"
+        f"⭐ Предмет добавлен в избранное."
+    )
 
 
 @router.message(F.text & ~F.text.startswith("/"))
@@ -312,9 +318,11 @@ async def cb_mkal(c: CallbackQuery):
         await c.answer("Предмет не найден", show_alert=True)
         return
     await db.alert_add(c.from_user.id, item_id, direction, float(threshold))
+    await db.watch_add(c.from_user.id, item_id)
     word = "подешевеет до" if direction == "below" else "подорожает до"
     await c.message.edit_text(
         f"✅ Принято! Сообщу, когда <b>{item[1]}</b> {word} <b>{fmt(float(threshold))} ₮</b>.\n"
+        f"⭐ Предмет добавлен в избранное.\n"
         f"<i>Проверяю цены каждые {COLLECT_EVERY_MIN} минут. Список: /alerts</i>"
     )
     await c.answer("Уведомление создано 🔔")
