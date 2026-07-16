@@ -322,7 +322,7 @@ function classify(lc) {
   if (/helmet|headgear|face shield|\bmask\b/.test(lc)) return 'helmet';
   if (/armor|\bvest\b|plate carrier/.test(lc)) return 'armor';
   if (/\brig\b|backpack|\bbag\b|pouch|case\b/.test(lc)) return 'gear';
-  if (/\bkey(card)?\b/.test(lc)) return 'keys';
+  if (/\bkey(card)?\b|room$|vault|entrance$|passage$|office$|lab$|dorm|apartment|warehouse$|locker room|control center$|armory$/.test(lc)) return 'keys';
   if (/first aid|medkit|bandage|stim|syringe|painkiller|adrenaline|defib|surgical|splint/.test(lc)) return 'meds';
   if (/scope|sight|optic|reflex|holograph|magnifier|thermal/.test(lc)) return 'optics';
   if (/barrel|stock|grip|handguard|\brail\b|muzzle|suppressor|silencer|brake|compensator|flash hider|\bmag\b|magazine|c-mag|drum|bolt|buffer|tube|mount|laser|bipod|receiver|adapter|charm|cap\b|lens/.test(lc)) return 'mods';
@@ -512,7 +512,7 @@ function renderMarket() {
     .map(id => CATALOG.find(i => i.id === id)).filter(Boolean).slice(0, 3);
   let body =
     '<div class="statgrid num" style="margin-top:12px">' +
-      '<span class="stat"><b>' + fmt(CATALOG.length) + '</b><span>предметов в торгах</span></span>' +
+      '<span class="stat"><b>' + fmt(CATALOG.length) + '</b><span>типов предметов</span></span>' +
       '<span class="stat"><b>' + CATS.filter(c => counts[c[0]]).length + '</b><span>категорий</span></span>' +
       '<span class="stat"><b><i class="pulse"></i> LIVE</b><span>цены аукциона</span></span>' +
     '</div>';
