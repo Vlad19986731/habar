@@ -438,6 +438,44 @@ STEAM_NEWS_URL = "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
 
 
 TG_NEWS_URL = "https://t.me/s/deltaforce_ru"
+TR_CACHE_PATH = REPO_DIR / "trcache.json"
+_tr_cache: dict | None = None
+
+
+async def _translate_en_ru(text: str) -> str:
+    """Перевод заголовка en->ru через публичный gtx-эндпоинт, с кэшем на диске."""
+    global _tr_cache
+    if _tr_cache is None:
+        try:
+            _tr_cache = json.loads(TR_CACHE_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            _tr_cache = {}
+    if text in _tr_cache:
+        return _tr_cache[text]
+    try:
+        r = await api._client.get(
+            "https://translate.googleapis.com/translate_a/single",
+            params={"client": "gtx", "sl": "en", "tl": "ru", "dt": "t", "q": text},
+        )
+        r.raise_for_status()
+        out = "".join(seg[0] for seg in r.json()[0] if seg and seg[0]).strip()
+        if out:
+            _tr_cache[text] = out
+            TR_CACHE_PATH.write_text(json.dumps(_tr_cache, ensure_ascii=False), encoding="utf-8")
+            return out
+    except Exception:
+        pass
+    return text
+
+
+_IMG_RE = re.compile(r"(\{STEAM_CLAN_IMAGE\}[^\s\]\[]+|https?://[^\s\]\[]+?\.(?:jpg|jpeg|png|gif))")
+
+
+def _steam_img(contents: str) -> str:
+    m = _IMG_RE.search(contents or "")
+    if not m:
+        return ""
+    return m.group(1).replace("{STEAM_CLAN_IMAGE}", "https://clan.akamai.steamstatic.com/images")
 
 
 def _parse_tg_posts(page: str, channel_limit: int = 6) -> list[dict]:
@@ -447,6 +485,7 @@ def _parse_tg_posts(page: str, channel_limit: int = 6) -> list[dict]:
         m_post = re.search(r'data-post="([^"]+)"', block)
         m_text = re.search(r'tgme_widget_message_text[^>]*>(.*?)</div>', block, re.S)
         m_time = re.search(r'<time datetime="([^"]+)"', block)
+        m_photo = re.search(r"background-image:url\('([^']+)'", block)
         if not (m_post and m_text):
             continue
         text = re.sub(r"<br/?>", " ", m_text.group(1))
@@ -465,7 +504,8 @@ def _parse_tg_posts(page: str, channel_limit: int = 6) -> list[dict]:
                 ts = int(datetime.fromisoformat(m_time.group(1).replace("Z", "+00:00")).timestamp())
             except ValueError:
                 pass
-        posts.append({"title": text[:150], "url": f"https://t.me/{m_post.group(1)}", "date": ts})
+        posts.append({"title": text[:150], "url": f"https://t.me/{m_post.group(1)}", "date": ts,
+                      "img": m_photo.group(1) if m_photo else ""})
     return posts[-channel_limit:][::-1]  # свежие сверху
 
 
@@ -477,10 +517,16 @@ async def refresh_news():
     try:
         steam, ru = [], []
         try:
-            r = await api._client.get(STEAM_NEWS_URL, params={"appid": 2507950, "count": 8, "maxlength": 250})
+            r = await api._client.get(STEAM_NEWS_URL, params={"appid": 2507950, "count": 8})
             r.raise_for_status()
-            steam = [{"title": i["title"], "url": i["url"], "date": i["date"]}
-                     for i in r.json()["appnews"]["newsitems"]]
+            for i in r.json()["appnews"]["newsitems"]:
+                steam.append({
+                    "title": i["title"],
+                    "title_ru": await _translate_en_ru(i["title"]),
+                    "url": i["url"],
+                    "date": i["date"],
+                    "img": _steam_img(i.get("contents", "")),
+                })
         except Exception:
             log.exception("Steam-новости недоступны")
         try:

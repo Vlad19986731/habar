@@ -102,6 +102,20 @@
   .rspark{width:56px; height:20px; flex:none}
   .pbar{height:6px; background:var(--well); border-radius:3px; margin-top:12px; overflow:hidden}
   .pbar i{display:block; height:100%; background:var(--orange)}
+
+  /* ---------- новостные карточки ---------- */
+  .nstack{display:flex; flex-direction:column; gap:8px}
+  .ncard{
+    display:block; width:100%; text-align:left; background:var(--surface);
+    border:1px solid var(--border); border-radius:10px; overflow:hidden;
+    cursor:pointer; font-family:inherit; padding:0; color:var(--text);
+  }
+  .ncard:active{background:var(--divider)}
+  .ncover{display:block; width:100%; aspect-ratio:2/1; background:var(--well); overflow:hidden}
+  .ncover img{width:100%; height:100%; object-fit:cover; display:block}
+  .nbody{display:block; padding:10px 12px 12px}
+  .nbody b{display:block; font-size:13px; font-weight:700; line-height:1.4}
+  .nbody span{display:block; color:var(--text2); font-size:10.5px; font-weight:600; margin-top:4px}
   .rmx{
     flex:none; color:var(--text3); font-size:15px; font-weight:700;
     padding:8px 2px 8px 8px; margin-right:-4px;
@@ -654,9 +668,9 @@ async function renderHome() {
     '<div class="brandrow"><div class="brand">ХАБАР<span>₮</span></div></div>' +
     '<div id="seasoncard" class="card cut" style="margin-top:14px"><div class="strip"></div><div class="spin" style="margin:12px auto"></div></div>' +
     '<div class="label sect">Новости на русском</div>' +
-    '<div class="list" id="runews"><div class="spin"></div></div>' +
+    '<div class="nstack" id="runews"><div class="spin"></div></div>' +
     '<div class="label sect">Патчи и обновления</div>' +
-    '<div class="list" id="newslist"><div class="spin"></div></div>' +
+    '<div class="nstack" id="newslist"><div class="spin"></div></div>' +
     '<div class="label sect">Сообщество</div>' +
     '<div class="btns">' +
       '<button class="btn" id="lnk-site">Оф. сайт</button>' +
@@ -689,14 +703,15 @@ async function renderHome() {
   }
 
   const newsRow = n =>
-    '<button class="row" data-url="' + String(n.url).replace(/"/g, '&quot;') + '" style="min-height:auto;padding:11px 12px">' +
-    '<span class="rmain"><b style="white-space:normal;font-size:13px;line-height:1.35">' + n.title + '</b>' +
-    (n.date ? '<span>' + new Date(n.date * 1000).toLocaleDateString('ru') + '</span>' : '') + '</span>' +
-    '<span style="color:var(--text3)">›</span></button>';
+    '<button class="ncard" data-url="' + String(n.url).replace(/"/g, '&quot;') + '">' +
+    (n.img ? '<span class="ncover"><img loading="lazy" src="' + n.img + '" alt="" onerror="this.parentNode.remove()"></span>' : '') +
+    '<span class="nbody"><b>' + (n.title_ru || n.title) + '</b>' +
+    (n.date ? '<span>' + new Date(n.date * 1000).toLocaleDateString('ru') + '</span>' : '') +
+    '</span></button>';
   const fillNews = (elId, items, emptyText) => {
     const el = document.getElementById(elId);
     if (!el) return;
-    el.innerHTML = (items && items.length) ? items.slice(0, 6).map(newsRow).join('')
+    el.innerHTML = (items && items.length) ? items.slice(0, 5).map(newsRow).join('')
       : '<div class="hint">' + emptyText + '</div>';
   };
   try {
@@ -745,7 +760,7 @@ function renderMore() {
 view.addEventListener('click', e => {
   const rm = e.target.closest('[data-rm]');
   if (rm) { handleRemoveFav(rm.dataset.rm); return; }
-  const row = e.target.closest('.row');
+  const row = e.target.closest('.row,.ncard');
   if (!row) return;
   if (row.dataset.url) { openExternal(row.dataset.url); return; }
   if (row.dataset.id) openItem(row.dataset.id);
