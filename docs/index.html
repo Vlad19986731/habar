@@ -7,138 +7,226 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
-    --bg:#0e1621; --surface:#17212b; --surface2:#1c2836; --line:rgba(255,255,255,.06);
-    --text:#f1f5f9; --text2:#8796a5; --text3:#5f6f7f;
-    --blue:#64b1f4; --green:#57c25d; --red:#ef6a5e; --amber:#e8b04b;
+    --page:#08090b; --app:#0d0f12; --edge:#1e2228;
+    --surface:#171a1f; --border:#262b33; --divider:#20242b; --well:#0a0c0f; --well-b:#2c323b;
+    --tabbar:#101317; --tab-b:#23272e;
+    --text:#f2f4f7; --white:#ffffff; --text2:#7d8694; --text3:#5c656e;
+    --orange:#ff9f2e; --orange-h:#ffb75c;
+    --green:#43dd7c; --green-bg:#10271a;
+    --red:#ff5f52; --red-bg:#2a1412;
+    --amber:#e9c463;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
   body{
-    background:var(--bg); color:var(--text);
-    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-    font-size:14px; line-height:1.45; overflow-x:hidden;
-    display:flex; flex-direction:column; min-height:100vh;
+    background:var(--page); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.45;
   }
   .num{font-variant-numeric:tabular-nums}
-  .up{color:var(--green)} .dn{color:var(--red)} .muted{color:var(--text2)}
+  .up{color:var(--green)} .dn{color:var(--red)}
+  input::placeholder{color:var(--text3)}
 
-  header{
-    position:sticky; top:0; z-index:10; background:var(--bg);
-    padding:12px 14px 10px; display:flex; flex-direction:column; gap:10px;
+  .app{
+    max-width:480px; margin:0 auto; min-height:100vh; min-height:100dvh;
+    display:flex; flex-direction:column; background:var(--app);
+    border-left:1px solid var(--edge); border-right:1px solid var(--edge);
   }
-  .brand{display:flex; align-items:center; gap:10px}
-  .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#5a7d3a,#2e4a2a);display:flex;align-items:center;justify-content:center;font-size:17px;flex:none}
-  .brand b{font-size:16px;letter-spacing:-.01em}
-  .brand small{display:block;font-size:11.5px;color:var(--text2)}
+  main{flex:1; overflow-y:auto; min-height:0; padding:14px 16px calc(84px + env(safe-area-inset-bottom))}
+
+  /* ---------- фирменные элементы ---------- */
+  .cut{ clip-path:polygon(0 0,100% 0,100% 100%,16px 100%,0 calc(100% - 16px)); }
+  .cut-s{ clip-path:polygon(0 0,100% 0,100% 100%,10px 100%,0 calc(100% - 10px)); }
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:16px; position:relative; overflow:hidden;
+  }
+  .strip{position:absolute; top:0; left:0; width:64px; height:3px; background:var(--orange)}
+  .label{
+    color:var(--text2); font-size:10px; font-weight:700;
+    letter-spacing:.14em; text-transform:uppercase;
+  }
+  .chip{
+    display:inline-block; font-size:12px; font-weight:800; padding:4px 10px;
+    border-radius:6px 6px 6px 0;
+  }
+  .btn{
+    flex:1; border:1.5px solid var(--orange); color:var(--orange); background:none;
+    font-size:13px; font-weight:800; text-align:center; padding:12px 0;
+    border-radius:8px 8px 8px 0; letter-spacing:.06em; text-transform:uppercase;
+    cursor:pointer; font-family:inherit;
+  }
+  .btn.fill{ background:var(--orange); color:#1c1102 }
+  .btn:active{ opacity:.75 }
+
+  /* ---------- шапка рынка ---------- */
+  .brandrow{display:flex; align-items:center; justify-content:space-between}
+  .brand{color:var(--text); font-size:20px; font-weight:800; letter-spacing:.02em}
+  .brand span{color:var(--orange)}
   .wipe{
-    margin-left:auto; font-size:11.5px; color:#eecf98; background:rgba(232,176,75,.1);
-    border:1px solid rgba(232,176,75,.22); padding:5px 10px; border-radius:9px; white-space:nowrap;
+    background:var(--surface); border:1px solid var(--border); color:var(--amber);
+    font-size:11.5px; font-weight:700; padding:6px 10px; border-radius:6px 6px 6px 0;
+    white-space:nowrap;
   }
   .search{
-    display:flex; align-items:center; gap:8px; background:var(--surface);
-    border-radius:11px; padding:9px 12px;
+    width:100%; margin-top:12px; background:var(--surface); border:1px solid var(--border);
+    border-radius:8px 8px 8px 0; padding:12px 14px; color:var(--text); font-size:14px;
+    outline:none; font-family:inherit;
   }
-  .search input{
-    flex:1; background:none; border:none; outline:none; color:var(--text);
-    font-size:14px; font-family:inherit;
-  }
-  .search input::placeholder{color:var(--text3)}
+  .search:focus{border-color:var(--orange)}
+  .sect{margin:16px 0 8px}
 
-  main{flex:1; padding:4px 12px 84px; display:flex; flex-direction:column; gap:8px}
-  .hint{color:var(--text3); font-size:12.5px; text-align:center; padding:22px 16px; line-height:1.6}
-
+  /* ---------- список ---------- */
+  .list{background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden}
   .row{
-    display:flex; align-items:center; gap:10px; background:var(--surface);
-    border-radius:12px; padding:9px 11px; cursor:pointer; border:none; width:100%;
+    display:flex; align-items:center; gap:10px; padding:9px 12px; min-height:54px;
+    border-bottom:1px solid var(--divider); cursor:pointer; width:100%;
+    background:none; border-left:none; border-right:none; border-top:none;
     color:var(--text); font-family:inherit; font-size:14px; text-align:left;
   }
-  .row:active{background:var(--surface2)}
-  .ric{width:36px;height:36px;border-radius:9px;flex:none;background:linear-gradient(150deg,#28394a,#141f2b);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden}
-  .ric img{width:100%;height:100%;object-fit:contain}
-  .rmain{flex:1;min-width:0}
-  .rmain b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
-  .rmain span{display:block;font-size:11.5px;color:var(--text2);margin-top:1px}
-  .rprice{text-align:right;flex:none}
-  .rprice b{display:block;font-size:13.5px}
-  .rprice span{display:block;font-size:11.5px;margin-top:1px}
+  .row:last-child{border-bottom:none}
+  .row:active{background:var(--divider)}
+  .well{
+    width:38px; height:38px; background:var(--well); border-radius:6px;
+    border-left:3px solid var(--orange); flex:none; position:relative;
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+  }
+  .well .ab{color:var(--orange); font-size:8px; font-family:ui-monospace,Consolas,monospace; letter-spacing:.05em}
+  .well img{position:absolute; inset:0; width:100%; height:100%; object-fit:contain}
+  .rmain{flex:1; min-width:0}
+  .rmain b{
+    display:block; color:var(--text); font-size:13.5px; font-weight:700;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .rmain span{display:block; color:var(--text2); font-size:10.5px; font-weight:600; margin-top:1px}
+  .rspark{width:56px; height:20px; flex:none}
+  .rprice{text-align:right; flex:none; min-width:70px}
+  .rprice b{display:block; color:var(--white); font-size:13.5px; font-weight:800}
+  .rprice span{display:block; font-size:11px; font-weight:700; margin-top:1px}
 
-  /* card */
-  .card{background:var(--surface); border-radius:14px; padding:14px}
-  .chead{display:flex; align-items:center; gap:10px; margin-bottom:10px}
-  .chead .ric{width:44px;height:44px}
-  .chead b{font-size:15.5px; letter-spacing:-.01em}
-  .price{font-size:26px; font-weight:800; letter-spacing:-.02em; margin:4px 0 2px}
-  .price small{font-size:13px; font-weight:600; color:var(--text2)}
-  .trend{display:flex; gap:14px; font-size:12.5px; margin:4px 0 10px}
-  canvas{width:100%; height:120px; display:block; margin:4px 0 8px}
-  .signal{
-    display:flex; gap:8px; align-items:flex-start; border-radius:10px; padding:8px 11px;
-    font-size:12.5px; line-height:1.4; margin-top:4px;
-    background:rgba(135,150,165,.08); border:1px solid var(--line);
-  }
-  .signal.good{background:rgba(87,194,93,.1); border-color:rgba(87,194,93,.25)}
-  .signal.bad{background:rgba(239,106,94,.09); border-color:rgba(239,106,94,.22)}
-  .src{font-size:11px; color:var(--text3); margin-top:10px}
-  .btns{display:flex; gap:8px; margin-top:12px}
-  .btn{
-    flex:1; border:none; border-radius:10px; padding:11px; font-size:13.5px; font-weight:700;
-    font-family:inherit; cursor:pointer; background:var(--surface2); color:var(--blue);
-  }
-  .btn.primary{background:var(--blue); color:#0e1621}
-  .btn:active{opacity:.8}
-  .back{
-    background:none; border:none; color:var(--blue); font-size:14px; font-family:inherit;
-    padding:6px 2px; cursor:pointer; align-self:flex-start; font-weight:600;
-  }
-
-  /* tabs */
-  nav{
-    position:fixed; bottom:0; left:0; right:0; display:flex;
-    background:var(--surface); padding:7px 6px calc(10px + env(safe-area-inset-bottom)); gap:2px;
-    border-top:1px solid var(--line);
-  }
-  .tab{
-    flex:1; background:none; border:none; text-align:center; font-size:10.5px;
-    color:var(--text3); display:flex; flex-direction:column; gap:3px; align-items:center;
-    font-family:inherit; cursor:pointer; padding:2px 0;
-  }
-  .tab i{font-style:normal; font-size:18px; line-height:1}
-  .tab.on{color:var(--blue)}
+  .hint{color:var(--text3); font-size:12.5px; text-align:center; padding:24px 16px; line-height:1.7}
+  .hint b{color:var(--text2)}
   .spin{
-    width:22px;height:22px;border:2.5px solid var(--line);border-top-color:var(--blue);
-    border-radius:50%;margin:26px auto;animation:sp 0.8s linear infinite;
+    width:22px; height:22px; border:2.5px solid var(--border); border-top-color:var(--orange);
+    border-radius:50%; margin:28px auto; animation:sp .8s linear infinite;
   }
   @keyframes sp{to{transform:rotate(360deg)}}
-  .empty{color:var(--text3);text-align:center;padding:26px 16px;font-size:13px;line-height:1.6}
+
+  /* ---------- карточка ---------- */
+  .back{
+    display:flex; align-items:center; gap:8px; color:var(--text2); font-size:14px;
+    font-weight:700; padding:10px 0; cursor:pointer; min-height:44px; background:none;
+    border:none; font-family:inherit;
+  }
+  .chead{display:flex; gap:12px; align-items:center}
+  .well-lg{
+    width:56px; height:56px; background:var(--well); border:1px solid var(--well-b);
+    border-radius:8px; flex:none; position:relative; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .well-lg .ab{color:var(--orange); font-size:10px; font-family:ui-monospace,Consolas,monospace}
+  .well-lg img{position:absolute; inset:0; width:100%; height:100%; object-fit:contain}
+  .cname{color:var(--text); font-size:16px; font-weight:800; margin-top:2px}
+  .bigprice{
+    margin-top:14px; color:var(--white); font-size:33px; font-weight:800;
+    letter-spacing:-.02em;
+  }
+  .bigprice span{color:var(--orange)}
+  .chips{display:flex; gap:8px; margin-top:10px}
+  .chart{width:100%; height:72px; margin-top:12px; display:block}
+  .chart-meta{
+    display:flex; justify-content:space-between; margin-top:6px;
+    color:var(--text2); font-size:10px; font-weight:700; letter-spacing:.1em;
+  }
+  .signal{
+    margin-top:12px; border-radius:8px 8px 8px 0; padding:9px 11px;
+    display:flex; align-items:center; gap:9px;
+  }
+  .signal i{width:8px; height:8px; border-radius:2px; flex:none; font-style:normal}
+  .signal b{font-size:12.5px; font-weight:700}
+  .btns{display:flex; gap:10px; margin-top:14px}
+  .src{margin-top:12px; color:var(--text3); font-size:11px}
+
+  /* ---------- заглушки скоро ---------- */
+  .soon{padding:28px 20px; text-align:center}
+  .soon .dia{
+    width:44px; height:44px; background:var(--well); border:1px solid var(--orange);
+    margin:0 auto; transform:rotate(45deg);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .soon .dia i{width:16px; height:16px; background:var(--orange)}
+  .soon h3{color:var(--text); font-size:16px; font-weight:800; margin-top:20px}
+  .soon p{color:var(--text2); font-size:13px; line-height:1.55; margin-top:8px}
+  .soon .cta{
+    display:inline-block; margin-top:18px; border:1.5px solid var(--orange); color:var(--orange);
+    font-size:13px; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
+    padding:12px 24px; border-radius:8px 8px 8px 0; cursor:pointer;
+  }
+  .h1{color:var(--text); font-size:20px; font-weight:800}
+  .sub{color:var(--text2); font-size:12.5px; margin-top:4px}
+
+  /* ---------- профиль ---------- */
+  .prem{
+    margin-top:12px; background:linear-gradient(160deg,#241505,var(--surface) 70%);
+    border:1px solid #5c3812; border-radius:10px; padding:16px;
+  }
+  .prem h4{color:var(--orange); font-size:14px; font-weight:800; letter-spacing:.08em}
+  .prem p{color:#c8ccd2; font-size:12.5px; line-height:1.65; margin-top:8px}
+
+  /* ---------- таб-бар ---------- */
+  nav{
+    position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+    width:100%; max-width:480px; display:flex; background:var(--tabbar);
+    border-top:1px solid var(--tab-b);
+    padding:4px 4px calc(8px + env(safe-area-inset-bottom, 8px));
+  }
+  .tab{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:8px 0 4px; min-height:44px; cursor:pointer; color:var(--text3);
+    background:none; border:none; font-family:inherit;
+  }
+  .tab svg{width:20px; height:20px}
+  .tab div{font-size:10px; font-weight:700}
+  .tab.on{color:var(--orange)}
 </style>
 </head>
 <body>
-<header>
-  <div class="brand">
-    <span class="logo">🎯</span>
-    <span><b>Хабар</b><small>цены аукциона Delta Force</small></span>
-    <span class="wipe" id="wipe">⏳ …</span>
-  </div>
-  <div class="search" id="searchbox">
-    <span style="color:var(--text3)">⌕</span>
-    <input id="q" type="search" placeholder="Поиск: вектор, дигл, helmet…" autocomplete="off">
-  </div>
-</header>
-<main id="view"></main>
-<nav>
-  <button class="tab on" data-tab="market"><i>📈</i>Рынок</button>
-  <button class="tab" data-tab="watch"><i>⭐</i>Вотчлист</button>
-  <button class="tab" data-tab="info"><i>ℹ️</i>Инфо</button>
-</nav>
+<div class="app">
+  <main id="view"></main>
+  <nav id="tabs">
+    <button class="tab on" data-tab="market">
+      <svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="10" width="3.5" height="8"/><rect x="8.25" y="4" width="3.5" height="14"/><rect x="14.5" y="7" width="3.5" height="11"/></svg>
+      <div>Рынок</div>
+    </button>
+    <button class="tab" data-tab="flips">
+      <svg viewBox="0 0 20 20" fill="currentColor"><rect x="3" y="5" width="10" height="3"/><polygon points="13,3 18,6.5 13,10"/><rect x="7" y="12" width="10" height="3"/><polygon points="7,10 2,13.5 7,17"/></svg>
+      <div>Флипы</div>
+    </button>
+    <button class="tab" data-tab="craft">
+      <svg viewBox="0 0 20 20" fill="currentColor"><rect x="6" y="6" width="8" height="8" transform="rotate(45 10 10)"/></svg>
+      <div>Крафт</div>
+    </button>
+    <button class="tab" data-tab="stash">
+      <svg viewBox="0 0 20 20" fill="currentColor"><rect x="3" y="3.5" width="14" height="3"/><rect x="3" y="8" width="14" height="9" rx="1"/></svg>
+      <div>Стэш</div>
+    </button>
+    <button class="tab" data-tab="more">
+      <svg viewBox="0 0 20 20" fill="currentColor"><circle cx="4" cy="10" r="2"/><circle cx="10" cy="10" r="2"/><circle cx="16" cy="10" r="2"/></svg>
+      <div>Ещё</div>
+    </button>
+  </nav>
+</div>
 
 <script>
 const API = 'https://api.deltaforceapi.com/deltaforceapi.gateway.v1.ApiService';
+const BOT_LINK = 'https://t.me/habar_price_bot';
 const tg = window.Telegram && window.Telegram.WebApp;
-if (tg) { tg.ready(); tg.expand(); }
+if (tg) { try { tg.ready(); tg.expand(); tg.setHeaderColor('#0d0f12'); tg.setBackgroundColor('#08090b'); } catch(e){} }
 
 const $ = s => document.querySelector(s);
 const view = $('#view');
 const fmt = n => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+const abbr = name => name.split(/\s+/).slice(0,2).map(w => w.slice(0,3).toUpperCase()).join(' ');
 
 const ALIASES = {
   'дигл':'desert eagle','деагл':'desert eagle','вектор':'vector','м4':'m4','ак':'ak',
@@ -186,12 +274,12 @@ function searchCatalog(q) {
   const t = translit(q); if (t !== q) variants.push(t);
   const seen = new Set(), out = [];
   for (const v of variants) for (const it of CATALOG) {
-    if (it.lc.includes(v) && !seen.has(it.id)) { seen.add(it.id); out.push(it); if (out.length >= 30) return out; }
+    if (it.lc.includes(v) && !seen.has(it.id)) { seen.add(it.id); out.push(it); if (out.length >= 20) return out; }
   }
   return out;
 }
 
-/* ---------- вотчлист (Telegram CloudStorage → fallback localStorage) ---------- */
+/* ---------- вотчлист ---------- */
 function cloudOk() {
   try { return !!(tg && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast('6.9')); }
   catch(e) { return false; }
@@ -210,38 +298,141 @@ function wlSet(list) {
   if (cloudOk()) { try { tg.CloudStorage.setItem('wl', v, ()=>{}); } catch(e){} }
 }
 
-/* ---------- экраны ---------- */
-let tab = 'market', lastResults = [], history = [];
+/* ---------- svg-графики ---------- */
+function chartSvg(values, opts) {
+  opts = opts || {};
+  const w = opts.w || 320, h = opts.h || 72;
+  const color = opts.color || '#ff9f2e', fill = opts.fill || 'rgba(255,159,46,.1)';
+  if (!values || values.length < 2) return '';
+  const lo = Math.min.apply(null, values), hi = Math.max.apply(null, values), pad = 4;
+  const x = i => (i * w / (values.length - 1)).toFixed(1);
+  const y = v => hi === lo ? h/2 : (pad + (hi - v) * (h - 2*pad) / (hi - lo)).toFixed(1);
+  const pts = values.map((v,i) => x(i) + ',' + y(v)).join(' ');
+  const last = values.length - 1;
+  return '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" class="chart" style="height:' + h + 'px">' +
+    '<line x1="0" y1="' + (h/2) + '" x2="' + w + '" y2="' + (h/2) + '" stroke="#23272e" stroke-width="1" stroke-dasharray="4 4"/>' +
+    '<polygon points="' + pts + ' ' + w + ',' + h + ' 0,' + h + '" fill="' + fill + '"/>' +
+    '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linejoin="round"/>' +
+    '<circle cx="' + x(last) + '" cy="' + y(values[last]) + '" r="4" fill="' + color + '"/></svg>';
+}
+function miniSvg(values, color) {
+  if (!values || values.length < 2) return '';
+  const lo = Math.min.apply(null, values), hi = Math.max.apply(null, values);
+  const x = i => (i * 56 / (values.length - 1)).toFixed(1);
+  const y = v => hi === lo ? 10 : (2 + (hi - v) * 16 / (hi - lo)).toFixed(1);
+  const pts = values.map((v,i) => x(i) + ',' + y(v)).join(' ');
+  return '<svg viewBox="0 0 56 20" class="rspark"><polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="1.5"/></svg>';
+}
 
-function renderMarket() {
-  if (!CATALOG.length) { view.innerHTML = '<div class="spin"></div>'; return; }
-  if (lastResults.length) { renderRows(lastResults); return; }
-  const recent = JSON.parse(localStorage.getItem('recent') || '[]');
-  if (recent.length) {
-    view.innerHTML = '<div class="hint" style="padding:8px 4px 2px;text-align:left">Недавние:</div>';
-    renderRows(recent.map(id => CATALOG.find(i => i.id === id)).filter(Boolean), true);
-  } else {
-    view.innerHTML = `<div class="hint">В базе <b>${CATALOG.length}</b> предметов аукциона.<br>
-      Начни печатать в поиске: <b>вектор</b>, <b>дигл</b>, <b>gold</b>, <b>helmet</b>…</div>`;
+/* ---------- строки списка ---------- */
+function rowHtml(it) {
+  return '<button class="row" data-id="' + it.id + '">' +
+    '<span class="well"><span class="ab">' + abbr(it.name) + '</span><img loading="lazy" src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
+    '<span class="rmain"><b>' + it.name + '</b><span id="sub-' + it.id + '">…</span></span>' +
+    '<span id="spark-' + it.id + '"></span>' +
+    '<span class="rprice"><b class="num" id="p-' + it.id + '">·····</b><span class="num" id="d-' + it.id + '"></span></span>' +
+    '</button>';
+}
+
+async function fillPrices(ids, withTrend) {
+  for (const id of ids) {
+    if (!document.getElementById('p-' + id)) return; // экран сменился
+    try {
+      const d = await api('GetAuctionItemPrice', {auctionItemId:id});
+      const p = d.price || {};
+      const pEl = document.getElementById('p-' + id);
+      if (!pEl) return;
+      pEl.textContent = fmt(p.price) + ' ₮';
+      const subEl = document.getElementById('sub-' + id);
+      if (subEl) subEl.textContent = p.referencePrice ? 'РЕФ ' + fmt(p.referencePrice) : 'аукцион';
+      if (withTrend) {
+        const s = await api('GetAuctionItemPriceSeries', {auctionItemId:id,
+          startTime: new Date(Date.now()-864e5).toISOString().slice(0,13)+':00:00Z'});
+        const avgs = (s.prices||[]).map(x=>x.priceAvg).filter(Boolean);
+        const dEl = document.getElementById('d-' + id);
+        if (avgs.length > 1 && dEl) {
+          const ch = (p.price - avgs[0]) / avgs[0] * 100;
+          const hex = ch >= 0 ? '#43dd7c' : '#ff5f52';
+          dEl.textContent = (ch>=0?'▲ +':'▼ ') + ch.toFixed(1) + '%';
+          dEl.style.color = hex;
+          const rowEl = dEl.closest('.row');
+          const wellEl = rowEl && rowEl.querySelector('.well');
+          if (wellEl) wellEl.style.borderLeftColor = hex;
+          const spEl = document.getElementById('spark-' + id);
+          if (spEl) spEl.outerHTML = miniSvg(avgs, hex);
+        }
+      }
+    } catch(e) {
+      const el = document.getElementById('p-' + id);
+      if (el) el.textContent = '—';
+    }
+    await new Promise(r => setTimeout(r, 120));
   }
 }
 
-function renderRows(items, append) {
-  const html = items.map(it => `
-    <button class="row" data-id="${it.id}">
-      <span class="ric"><img loading="lazy" src="${it.icon}" alt="" onerror="this.remove()"></span>
-      <span class="rmain"><b>${it.name}</b></span>
-      <span style="color:var(--text3)">›</span>
-    </button>`).join('');
-  if (append) view.insertAdjacentHTML('beforeend', html);
-  else view.innerHTML = html;
+/* ---------- экраны ---------- */
+let tab = 'market', lastQ = '';
+
+function marketHeader() {
+  return '<div class="brandrow"><div class="brand">ХАБАР<span>₮</span></div>' +
+    '<div class="wipe num" id="wipe">⏳ …</div></div>' +
+    '<input class="search" id="q" type="search" placeholder="Поиск: вектор, дигл, gold…" autocomplete="off" value="' + lastQ.replace(/"/g,'&quot;') + '">';
 }
 
-/* делегирование кликов: живёт один раз, не зависит от перерисовок */
-view.addEventListener('click', e => {
-  const row = e.target.closest('.row');
-  if (row && row.dataset.id) openItem(row.dataset.id);
-});
+function renderMarket() {
+  if (!CATALOG.length) { view.innerHTML = marketHeader() + '<div class="spin"></div>'; bindSearch(); updWipe(); return; }
+  const results = lastQ.trim().length >= 2 ? searchCatalog(lastQ) : null;
+  let body;
+  if (results && results.length) {
+    body = '<div class="label sect">Найдено · ' + results.length + '</div>' +
+      '<div class="list">' + results.map(rowHtml).join('') + '</div>';
+    view.innerHTML = marketHeader() + body;
+    bindSearch(); updWipe();
+    fillPrices(results.slice(0,8).map(i=>i.id), false);
+    return;
+  }
+  if (results && !results.length) {
+    view.innerHTML = marketHeader() + '<div class="hint">Ничего не нашёл 😕<br>Попробуй по-английски или короче.</div>';
+    bindSearch(); updWipe(); return;
+  }
+  const recent = JSON.parse(localStorage.getItem('recent') || '[]')
+    .map(id => CATALOG.find(i => i.id === id)).filter(Boolean);
+  if (recent.length) {
+    body = '<div class="label sect">Недавние</div>' +
+      '<div class="list">' + recent.map(rowHtml).join('') + '</div>';
+    view.innerHTML = marketHeader() + body;
+    bindSearch(); updWipe();
+    fillPrices(recent.slice(0,8).map(i=>i.id), false);
+  } else {
+    view.innerHTML = marketHeader() + '<div class="hint">В базе <b>' + CATALOG.length + '</b> предметов аукциона.<br>' +
+      'Начни печатать в поиске: <b>вектор</b>, <b>дигл</b>, <b>gold</b>, <b>helmet</b>…</div>';
+    bindSearch(); updWipe();
+  }
+}
+
+let wipeCache = null;
+async function updWipe() {
+  if (!$('#wipe')) return;
+  try {
+    if (!wipeCache) { const d = await api('GetSeasonCurrent'); wipeCache = d.season; }
+    const days = Math.max(0, Math.ceil((new Date(wipeCache.endedAt) - Date.now()) / 864e5));
+    const el = $('#wipe'); if (el) el.textContent = '⏳ вайп через ' + days + ' дн.';
+  } catch(e) { const el = $('#wipe'); if (el) el.style.display = 'none'; }
+}
+
+function bindSearch() {
+  const q = $('#q'); if (!q) return;
+  let deb;
+  q.addEventListener('input', e => {
+    clearTimeout(deb);
+    deb = setTimeout(() => {
+      lastQ = e.target.value;
+      renderMarket();
+      const nq = $('#q');
+      if (nq) { nq.focus(); try { nq.setSelectionRange(nq.value.length, nq.value.length); } catch(err){} }
+    }, 250);
+  });
+}
 
 async function openItem(id) {
   const it = CATALOG.find(i => i.id === id);
@@ -249,18 +440,19 @@ async function openItem(id) {
   const recent = JSON.parse(localStorage.getItem('recent') || '[]').filter(x => x !== id);
   recent.unshift(id); localStorage.setItem('recent', JSON.stringify(recent.slice(0,10)));
 
-  view.innerHTML = '<button class="back" id="bk">‹ Назад</button><div class="spin"></div>';
-  $('#bk').onclick = () => { tab==='watch' ? renderWatch() : renderMarket(); };
+  view.innerHTML = backBtn() + '<div class="spin"></div>';
+  $('#bk').onclick = goBack;
 
   let priceD, series;
   try {
-    [priceD, series] = await Promise.all([
+    const res = await Promise.all([
       api('GetAuctionItemPrice', {auctionItemId:id}),
       api('GetAuctionItemPriceSeries', {auctionItemId:id, startTime: new Date(Date.now()-7*864e5).toISOString().slice(0,13)+':00:00Z'})
     ]);
+    priceD = res[0]; series = res[1];
   } catch(e) {
-    view.innerHTML = '<button class="back" id="bk">‹ Назад</button><div class="empty">Не удалось получить цену 😕<br>Попробуй ещё раз.</div>';
-    $('#bk').onclick = () => renderMarket();
+    view.innerHTML = backBtn() + '<div class="hint">Не удалось получить цену 😕<br>Попробуй ещё раз.</div>';
+    $('#bk').onclick = goBack;
     return;
   }
   const p = priceD.price || {};
@@ -273,130 +465,143 @@ async function openItem(id) {
   const avg7 = avgs.length ? avgs.reduce((a,b)=>a+b,0)/avgs.length : 0;
   const dev = avg7 ? (price - avg7)/avg7*100 : 0;
 
-  let sigCls = '', sigTxt = '⚪️ Около средней за 7 дней';
-  if (dev <= -5) { sigCls = 'good'; sigTxt = `🟢 Ниже средней за 7д на ${Math.abs(dev).toFixed(0)}% — возможная точка входа`; }
-  else if (dev >= 5) { sigCls = 'bad'; sigTxt = `🔴 Выше средней за 7д на ${dev.toFixed(0)}% — дорого`; }
+  const chip = (v, lbl) => v === null ? '' :
+    '<span class="chip num" style="background:var(--' + (v>=0?'green':'red') + '-bg);color:var(--' + (v>=0?'green':'red') + ')">' +
+    (v>=0?'▲ +':'▼ ') + v.toFixed(1) + '% ' + lbl + '</span>';
+
+  let sigBg='var(--divider)', sigC='var(--text2)', sigDot='var(--text2)', sigTxt='Около средней за 7 дней';
+  if (dev <= -5) { sigBg='var(--green-bg)'; sigC='var(--green)'; sigDot='var(--green)'; sigTxt='Ниже средней 7д на ' + Math.abs(dev).toFixed(0) + '% — точка входа'; }
+  else if (dev >= 5) { sigBg='var(--red-bg)'; sigC='var(--red)'; sigDot='var(--red)'; sigTxt='Выше средней 7д на ' + dev.toFixed(0) + '% — дорого'; }
 
   const wl = await wlGet();
   const inWl = wl.includes(id);
 
-  view.innerHTML = `
-    <button class="back" id="bk">‹ Назад</button>
-    <div class="card">
-      <div class="chead">
-        <span class="ric"><img src="${it.icon}" alt="" onerror="this.remove()"></span>
-        <div><b>${it.name}</b></div>
-      </div>
-      <div class="price num">${fmt(price)}<small> ₮</small></div>
-      ${p.referencePrice ? `<div class="muted num" style="font-size:12.5px">🏷 Референс: ${fmt(p.referencePrice)}</div>` : ''}
-      <div class="trend num">
-        ${d24 !== null ? `<span class="${d24>=0?'up':'dn'}">${d24>=0?'▲':'▼'} 24ч ${d24>=0?'+':''}${d24.toFixed(1)}%</span>` : ''}
-        ${d7  !== null ? `<span class="${d7>=0?'up':'dn'}">${d7>=0?'▲':'▼'} 7д ${d7>=0?'+':''}${d7.toFixed(1)}%</span>` : ''}
-      </div>
-      <canvas id="ch" width="640" height="240"></canvas>
-      <div class="signal ${sigCls}">${sigTxt}</div>
-      <div class="btns">
-        <button class="btn primary" id="wlbtn">${inWl ? '✅ В вотчлисте' : '⭐ В вотчлист'}</button>
-      </div>
-      <div class="src">Аукцион · глобал · ${new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'})} · данные deltaforceapi.com</div>
-    </div>`;
-  $('#bk').onclick = () => { lastResults.length ? renderRows(lastResults) : renderMarket(); };
+  view.innerHTML = backBtn() +
+    '<div class="card cut" style="margin-top:6px"><div class="strip"></div>' +
+    '<div class="chead">' +
+      '<span class="well-lg cut-s"><span class="ab">' + abbr(it.name) + '</span><img src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
+      '<div style="flex:1"><div class="label">Аукцион · Операции</div><div class="cname">' + it.name + '</div></div>' +
+    '</div>' +
+    '<div class="bigprice num">' + fmt(price) + ' <span>₮</span></div>' +
+    '<div class="chips">' + chip(d24,'24Ч') + chip(d7,'7Д') + '</div>' +
+    chartSvg(avgs) +
+    '<div class="chart-meta"><span>' + (p.referencePrice ? 'РЕФ. ЦЕНА ' + fmt(p.referencePrice) : '') + '</span><span>7 ДНЕЙ</span></div>' +
+    '<div class="signal" style="background:' + sigBg + '"><i style="background:' + sigDot + '"></i><b style="color:' + sigC + '">' + sigTxt + '</b></div>' +
+    '<div class="btns">' +
+      '<button class="btn ' + (inWl?'fill':'') + '" id="wlbtn">' + (inWl ? '✓ В вотчлисте' : '⭐ В вотчлист') + '</button>' +
+      '<button class="btn" id="albtn">Алерт в боте</button>' +
+    '</div>' +
+    '<div class="src">Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com</div>' +
+    '</div>';
+  $('#bk').onclick = goBack;
   $('#wlbtn').onclick = async () => {
     let w = await wlGet();
     if (w.includes(id)) w = w.filter(x => x !== id); else w.push(id);
     wlSet(w);
-    $('#wlbtn').textContent = w.includes(id) ? '✅ В вотчлисте' : '⭐ В вотчлист';
-    if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+    const b = $('#wlbtn');
+    b.textContent = w.includes(id) ? '✓ В вотчлисте' : '⭐ В вотчлист';
+    b.classList.toggle('fill', w.includes(id));
+    if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch(e){} }
   };
-  if (avgs.length > 1) drawChart($('#ch'), avgs);
+  $('#albtn').onclick = openBot;
 }
 
-function drawChart(cv, data) {
-  const ctx = cv.getContext('2d');
-  const W = cv.width, H = cv.height, pad = 8;
-  const lo = Math.min(...data), hi = Math.max(...data);
-  const x = i => pad + i * (W - 2*pad) / (data.length - 1);
-  const y = v => hi === lo ? H/2 : pad + (hi - v) * (H - 2*pad) / (hi - lo);
-  const up = data[data.length-1] >= data[0];
-  const col = up ? '#57c25d' : '#ef6a5e';
-  ctx.clearRect(0,0,W,H);
-  ctx.beginPath();
-  data.forEach((v,i) => i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)));
-  ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
-  ctx.lineTo(x(data.length-1), H); ctx.lineTo(x(0), H); ctx.closePath();
-  ctx.fillStyle = up ? 'rgba(87,194,93,.10)' : 'rgba(239,106,94,.10)'; ctx.fill();
-  ctx.beginPath(); ctx.arc(x(data.length-1), y(data[data.length-1]), 5, 0, 7);
-  ctx.fillStyle = col; ctx.fill();
+function backBtn() {
+  return '<button class="back" id="bk">' +
+    '<svg viewBox="0 0 20 20" style="width:16px;height:16px"><polyline points="12,4 6,10 12,16" fill="none" stroke="#ff9f2e" stroke-width="2.5"/></svg>' +
+    'Назад</button>';
+}
+function goBack() { tab === 'stash' ? renderStash() : renderMarket(); }
+function openBot() {
+  if (tg && tg.openTelegramLink) { try { tg.openTelegramLink(BOT_LINK); return; } catch(e){} }
+  window.open(BOT_LINK, '_blank');
 }
 
-async function renderWatch() {
+async function renderStash() {
   const wl = await wlGet();
-  if (!wl.length) { view.innerHTML = '<div class="empty">Вотчлист пуст.<br>Открой предмет и нажми «⭐ В вотчлист».</div>'; return; }
-  view.innerHTML = '<div class="spin"></div>';
-  let html = '';
-  for (const id of wl) {
-    const it = CATALOG.find(i => i.id === id);
-    if (!it) continue;
-    let ptxt = '—';
-    try { const d = await api('GetAuctionItemPrice', {auctionItemId:id}); ptxt = fmt(d.price.price); } catch(e){}
-    html += `
-      <button class="row" data-id="${id}">
-        <span class="ric"><img loading="lazy" src="${it.icon}" alt="" onerror="this.remove()"></span>
-        <span class="rmain"><b>${it.name}</b></span>
-        <span class="rprice"><b class="num">${ptxt}</b></span>
-      </button>`;
+  const head = '<div class="h1">Стэш</div><div class="sub">Вотчлист · ' + wl.length + ' предм.</div>';
+  if (!wl.length) {
+    view.innerHTML = head + '<div class="hint" style="margin-top:20px">Пусто.<br>Открой предмет на «Рынке» и нажми «⭐ В вотчлист».</div>';
+    return;
   }
-  view.innerHTML = html || '<div class="empty">Вотчлист пуст.</div>';
+  const items = wl.map(id => CATALOG.find(i => i.id === id)).filter(Boolean);
+  view.innerHTML = head + '<div class="list" style="margin-top:16px">' + items.map(rowHtml).join('') + '</div>' +
+    '<div class="hint" style="padding:14px">🔔 Алерты по цене — в карточке предмета → «Алерт в боте»</div>';
+  fillPrices(items.map(i=>i.id), true);
 }
 
-function renderInfo() {
-  view.innerHTML = `
-    <div class="card" style="font-size:13px; line-height:1.65">
-      <b style="font-size:15px">🎯 Хабар</b>
-      <p class="muted" style="margin-top:8px">Живые цены аукциона Delta Force (режим Operations). Данные — открытый API deltaforceapi.com, глобальный сервер (тот же, где играет РФ).</p>
-      <p class="muted" style="margin-top:8px">🔔 <b style="color:var(--text)">Алерты по цене</b> — в чат-боте: открой @habar_price_bot, найди предмет и нажми «Алерт». Бот напишет, когда цена дойдёт до порога.</p>
-      <p class="muted" style="margin-top:8px">⭐ Вотчлист синхронизируется через Telegram.</p>
-      <p style="margin-top:10px; font-size:11.5px; color:var(--text3)">Не аффилирован с TiMi Studios / Tencent. Цены информационные.</p>
-    </div>`;
+function renderFlips() {
+  view.innerHTML =
+    '<div class="h1">Флипы</div>' +
+    '<div class="sub">Максимальная маржа прямо сейчас · комиссия аукциона 15% учтена</div>' +
+    '<div class="card cut soon" style="margin-top:16px"><div class="strip"></div>' +
+    '<div class="dia"><i></i></div>' +
+    '<h3>Флип-финдер скоро</h3>' +
+    '<p>Сканируем аукцион и покажем связки «купил дёшево → продал дорого» с маржой после комиссии и оценкой ликвидности.</p>' +
+    '<div class="cta" id="flipcta">Напомнить в боте</div></div>';
+  $('#flipcta').onclick = openBot;
+}
+
+function renderCraft() {
+  view.innerHTML =
+    '<div class="h1">Крафт</div>' +
+    '<div class="card cut soon" style="margin-top:16px"><div class="strip"></div>' +
+    '<div class="dia"><i></i></div>' +
+    '<h3>Крафт-калькулятор скоро</h3>' +
+    '<p>Посчитаем себестоимость крафта против цены аукциона — и покажем, что выгодно крафтить на продажу.</p>' +
+    '<div class="cta" id="craftcta">Напомнить в боте</div></div>' +
+    '<div class="label sect" style="margin-top:20px">В разработке</div>' +
+    '<div class="list">' +
+    '<div class="row" style="cursor:default"><span class="rmain"><b>Крафт-калькулятор</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
+    '<div class="row" style="cursor:default"><span class="rmain"><b>Стоимость инвентаря по нику</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
+    '</div>';
+  $('#craftcta').onclick = openBot;
+}
+
+function renderMore() {
+  view.innerHTML =
+    '<div style="display:flex;align-items:center;gap:12px">' +
+    '<div style="width:48px;height:48px;background:var(--well);border:1px solid var(--orange);border-radius:8px 8px 8px 0;display:flex;align-items:center;justify-content:center;color:var(--orange);font-size:14px;font-weight:800">ОП</div>' +
+    '<div><div style="color:var(--text);font-size:17px;font-weight:800">Оператор</div>' +
+    '<div style="color:var(--text2);font-size:11.5px;font-weight:600;margin-top:2px" id="seasonline">Operations</div></div></div>' +
+    '<div class="card cut" style="margin-top:16px"><div class="strip"></div>' +
+    '<div class="label">Стоимость инвентаря</div>' +
+    '<p style="color:var(--text2);font-size:13px;line-height:1.55;margin-top:8px">Привяжем твой игровой ник — и здесь появится живая стоимость твоего стэша с динамикой за 30 дней. Уже в разработке.</p></div>' +
+    '<div class="prem cut"><h4>ХАБАР PRO</h4>' +
+    '<p>Безлимитные алерты по цене<br>Флип-финдер в реальном времени<br>История цен за 90 дней</p>' +
+    '<div class="btn fill" style="display:block;margin-top:14px" id="probtn">Скоро · следи в боте</div></div>' +
+    '<div class="hint">🔔 Цены и алерты в чате: <b>@habar_price_bot</b><br><span style="font-size:11px">Не аффилирован с TiMi Studios / Tencent · данные deltaforceapi.com</span></div>';
+  $('#probtn').onclick = openBot;
+  api('GetSeasonCurrent').then(d => {
+    const el = $('#seasonline');
+    if (el && d.season) el.textContent = 'Сезон ' + d.season.number + ' «' + d.season.name + '» · Operations';
+  }).catch(()=>{});
 }
 
 /* ---------- события ---------- */
+view.addEventListener('click', e => {
+  const row = e.target.closest('.row');
+  if (row && row.dataset.id) openItem(row.dataset.id);
+});
+
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
   b.classList.add('on');
   tab = b.dataset.tab;
-  lastResults = [];
-  $('#q').value = '';
   if (tab === 'market') renderMarket();
-  else if (tab === 'watch') renderWatch();
-  else renderInfo();
-});
-
-let debounce;
-$('#q').addEventListener('input', e => {
-  clearTimeout(debounce);
-  debounce = setTimeout(() => {
-    const q = e.target.value;
-    if (tab !== 'market') { tab = 'market';
-      document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.dataset.tab==='market')); }
-    lastResults = searchCatalog(q);
-    if (q.trim().length < 2) renderMarket();
-    else if (!lastResults.length) view.innerHTML = '<div class="empty">Ничего не нашёл 😕<br>Попробуй по-английски или короче.</div>';
-    else renderRows(lastResults);
-  }, 200);
+  else if (tab === 'flips') renderFlips();
+  else if (tab === 'craft') renderCraft();
+  else if (tab === 'stash') renderStash();
+  else renderMore();
 });
 
 /* ---------- старт ---------- */
 (async function init() {
-  view.innerHTML = '<div class="spin"></div>';
-  api('GetSeasonCurrent').then(d => {
-    const s = d.season;
-    const days = Math.max(0, Math.ceil((new Date(s.endedAt) - Date.now()) / 864e5));
-    $('#wipe').textContent = `⏳ вайп через ${days} дн.`;
-    $('#wipe').title = `Сезон ${s.number} «${s.name}»`;
-  }).catch(()=>{ $('#wipe').style.display = 'none'; });
+  view.innerHTML = marketHeader() + '<div class="spin"></div>';
+  bindSearch(); updWipe();
   try { await loadCatalog(); } catch(e) {
-    view.innerHTML = '<div class="empty">Не удалось загрузить каталог 😕<br>Проверь интернет и обнови страницу.</div>';
+    view.innerHTML = marketHeader() + '<div class="hint">Не удалось загрузить каталог 😕<br>Проверь интернет и обнови страницу.</div>';
+    bindSearch();
     return;
   }
   renderMarket();
