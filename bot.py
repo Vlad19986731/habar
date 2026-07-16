@@ -468,7 +468,7 @@ async def _translate_en_ru(text: str) -> str:
     return text
 
 
-_IMG_RE = re.compile(r"(\{STEAM_CLAN_IMAGE\}[^\s\]\[]+|https?://[^\s\]\[]+?\.(?:jpg|jpeg|png|gif))")
+_IMG_RE = re.compile(r"(\{STEAM_CLAN_IMAGE\}[^\s\]\[\"'<>]+|https?://[^\s\]\[\"'<>]+?\.(?:jpg|jpeg|png|gif))")
 
 
 def _steam_img(contents: str) -> str:
