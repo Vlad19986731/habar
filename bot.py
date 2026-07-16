@@ -4,8 +4,11 @@
 Требует: .env с BOT_TOKEN=...
 """
 import asyncio
+import json
 import logging
+import subprocess
 from datetime import datetime, timezone
+from pathlib import Path
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
@@ -427,6 +430,42 @@ async def refresh_items():
         log.exception("Не удалось обновить справочник предметов")
 
 
+REPO_DIR = Path(__file__).parent
+NEWS_PATH = REPO_DIR / "docs" / "news.json"
+STEAM_NEWS_URL = "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
+
+
+async def refresh_news():
+    """Каждые 6 часов: новости Delta Force из Steam -> docs/news.json -> git push.
+
+    GitHub Pages раздаёт файл приложению (обход CORS без своего сервера).
+    """
+    try:
+        r = await api._client.get(STEAM_NEWS_URL, params={"appid": 2507950, "count": 8, "maxlength": 250})
+        r.raise_for_status()
+        items = r.json()["appnews"]["newsitems"]
+        news = [{"title": i["title"], "url": i["url"], "date": i["date"], "label": i.get("feedlabel", "")} for i in items]
+        if NEWS_PATH.exists():
+            try:
+                if json.loads(NEWS_PATH.read_text(encoding="utf-8")).get("items") == news:
+                    return  # ничего нового
+            except Exception:
+                pass
+        NEWS_PATH.write_text(
+            json.dumps({"updated": datetime.now(timezone.utc).isoformat(), "items": news}, ensure_ascii=False, indent=1),
+            encoding="utf-8",
+        )
+        for cmd in (["git", "add", "docs/news.json"],
+                    ["git", "commit", "-m", "news: auto-update"],
+                    ["git", "push"]):
+            res = subprocess.run(cmd, cwd=str(REPO_DIR), capture_output=True, timeout=120)
+            if res.returncode != 0 and cmd[1] != "commit":
+                log.warning("git %s: %s", cmd[1], res.stderr.decode(errors="ignore")[:200])
+        log.info("Новости обновлены: %s шт.", len(news))
+    except Exception:
+        log.exception("Не удалось обновить новости")
+
+
 async def collect_and_check(bot: Bot):
     """Каждые N минут: снапшот цен отслеживаемых предметов + проверка алертов."""
     ids = await db.tracked_item_ids()
@@ -478,6 +517,7 @@ async def main():
 
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(refresh_items, "interval", hours=24)
+    scheduler.add_job(refresh_news, "interval", hours=6)
     scheduler.add_job(collect_and_check, "interval", minutes=COLLECT_EVERY_MIN, args=[bot])
     scheduler.start()
 

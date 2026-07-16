@@ -100,6 +100,8 @@
   }
   .rmain span{display:block; color:var(--text2); font-size:10.5px; font-weight:600; margin-top:1px}
   .rspark{width:56px; height:20px; flex:none}
+  .pbar{height:6px; background:var(--well); border-radius:3px; margin-top:12px; overflow:hidden}
+  .pbar i{display:block; height:100%; background:var(--orange)}
   .rmx{
     flex:none; color:var(--text3); font-size:15px; font-weight:700;
     padding:8px 2px 8px 8px; margin-right:-4px;
@@ -199,17 +201,17 @@
 <div class="app">
   <main id="view"></main>
   <nav id="tabs">
-    <button class="tab on" data-tab="market">
+    <button class="tab on" data-tab="home">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2 2 9h2v8h4.5v-5h3v5H16V9h2z"/></svg>
+      <div>Главная</div>
+    </button>
+    <button class="tab" data-tab="market">
       <svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="10" width="3.5" height="8"/><rect x="8.25" y="4" width="3.5" height="14"/><rect x="14.5" y="7" width="3.5" height="11"/></svg>
       <div>Рынок</div>
     </button>
     <button class="tab" data-tab="flips">
       <svg viewBox="0 0 20 20" fill="currentColor"><rect x="3" y="5" width="10" height="3"/><polygon points="13,3 18,6.5 13,10"/><rect x="7" y="12" width="10" height="3"/><polygon points="7,10 2,13.5 7,17"/></svg>
       <div>Флипы</div>
-    </button>
-    <button class="tab" data-tab="craft">
-      <svg viewBox="0 0 20 20" fill="currentColor"><rect x="6" y="6" width="8" height="8" transform="rotate(45 10 10)"/></svg>
-      <div>Крафт</div>
     </button>
     <button class="tab" data-tab="stash">
       <svg viewBox="0 0 20 20" fill="currentColor"><polygon points="10,1.5 12.6,7 18.5,7.8 14.2,11.9 15.2,17.7 10,14.9 4.8,17.7 5.8,11.9 1.5,7.8 7.4,7"/></svg>
@@ -396,7 +398,7 @@ async function fillPrices(ids, withTrend) {
 }
 
 /* ---------- экраны ---------- */
-let tab = 'market', lastQ = '';
+let tab = 'home', lastQ = '';
 
 function marketHeader() {
   return '<div class="brandrow"><div class="brand">ХАБАР<span>₮</span></div>' +
@@ -405,7 +407,12 @@ function marketHeader() {
 }
 
 function renderMarket() {
-  if (!CATALOG.length) { view.innerHTML = marketHeader() + '<div class="spin"></div>'; bindSearch(); updWipe(); return; }
+  if (!CATALOG.length) {
+    view.innerHTML = marketHeader() + (catError
+      ? '<div class="hint">Не удалось загрузить каталог 😕<br>Проверь интернет и перезапусти приложение.</div>'
+      : '<div class="spin"></div>');
+    bindSearch(); updWipe(); return;
+  }
   const results = lastQ.trim().length >= 2 ? searchCatalog(lastQ) : null;
   let body;
   if (results && results.length) {
@@ -642,20 +649,63 @@ function renderFlips() {
   $('#flipcta').onclick = openBot;
 }
 
-function renderCraft() {
+async function renderHome() {
   view.innerHTML =
-    '<div class="h1">Крафт</div>' +
-    '<div class="card cut soon" style="margin-top:16px"><div class="strip"></div>' +
-    '<div class="dia"><i></i></div>' +
-    '<h3>Крафт-калькулятор скоро</h3>' +
-    '<p>Посчитаем себестоимость крафта против цены аукциона — и покажем, что выгодно крафтить на продажу.</p>' +
-    '<div class="cta" id="craftcta">Напомнить в боте</div></div>' +
-    '<div class="label sect" style="margin-top:20px">В разработке</div>' +
-    '<div class="list">' +
-    '<div class="row" style="cursor:default"><span class="rmain"><b>Крафт-калькулятор</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
-    '<div class="row" style="cursor:default"><span class="rmain"><b>Стоимость инвентаря по нику</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
+    '<div class="brandrow"><div class="brand">ХАБАР<span>₮</span></div></div>' +
+    '<div id="seasoncard" class="card cut" style="margin-top:14px"><div class="strip"></div><div class="spin" style="margin:12px auto"></div></div>' +
+    '<div class="label sect">Новости и патчи</div>' +
+    '<div class="list" id="newslist"><div class="spin"></div></div>' +
+    '<div class="label sect">Сообщество</div>' +
+    '<div class="btns">' +
+      '<button class="btn" id="lnk-site">Оф. сайт</button>' +
+      '<button class="btn" id="lnk-tg">TG-канал</button>' +
+      '<button class="btn" id="lnk-ds">Discord</button>' +
     '</div>';
-  $('#craftcta').onclick = openBot;
+  $('#lnk-site').onclick = () => openExternal('https://www.playdeltaforce.com/ru/');
+  $('#lnk-tg').onclick = () => {
+    if (tg && tg.openTelegramLink) { try { tg.openTelegramLink('https://t.me/deltaforce_ru'); return; } catch(e){} }
+    window.open('https://t.me/deltaforce_ru', '_blank');
+  };
+  $('#lnk-ds').onclick = () => openExternal('https://discord.com/servers/delta-force-sng-646178429971988500');
+
+  try {
+    if (!wipeCache) { const d = await api('GetSeasonCurrent'); wipeCache = d.season; }
+    const s = wipeCache;
+    const start = new Date(s.startedAt), end = new Date(s.endedAt), now = new Date();
+    const days = Math.max(0, Math.ceil((end - now) / 864e5));
+    const pct = Math.min(100, Math.max(0, (now - start) / (end - start) * 100));
+    const el = document.getElementById('seasoncard');
+    if (el) el.innerHTML = '<div class="strip"></div>' +
+      '<div class="label">Сезон ' + s.number + ' · «' + s.name + '»</div>' +
+      '<div class="bigprice num" style="font-size:28px;margin-top:8px">' + days + ' <span style="font-size:15px">дн. до вайпа</span></div>' +
+      '<div class="pbar"><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
+      '<div class="chart-meta"><span>' + start.toLocaleDateString('ru') + '</span><span>' + end.toLocaleDateString('ru') + '</span></div>' +
+      '<div class="hint" style="text-align:left;padding:10px 0 0">💡 Перед вайпом гир дешевеет — все распродаются. Сразу после вайпа дорожают материалы и базовый гир.</div>';
+  } catch(e) {
+    const el = document.getElementById('seasoncard');
+    if (el) el.innerHTML = '<div class="hint">Данные сезона недоступны</div>';
+  }
+
+  try {
+    const r = await fetch('news.json?_=' + Date.now());
+    const data = await r.json();
+    const nl = document.getElementById('newslist');
+    if (nl && data.items && data.items.length) {
+      nl.innerHTML = data.items.slice(0, 8).map(n =>
+        '<button class="row" data-url="' + String(n.url).replace(/"/g, '&quot;') + '" style="min-height:auto;padding:11px 12px">' +
+        '<span class="rmain"><b style="white-space:normal;font-size:13px;line-height:1.35">' + n.title + '</b>' +
+        '<span>' + new Date(n.date * 1000).toLocaleDateString('ru') + '</span></span>' +
+        '<span style="color:var(--text3)">›</span></button>').join('');
+    } else if (nl) nl.innerHTML = '<div class="hint">Новостей пока нет</div>';
+  } catch(e) {
+    const nl = document.getElementById('newslist');
+    if (nl) nl.innerHTML = '<div class="hint">Не удалось загрузить новости</div>';
+  }
+}
+
+function openExternal(url) {
+  if (tg && tg.openLink) { try { tg.openLink(url); return; } catch(e){} }
+  window.open(url, '_blank');
 }
 
 function renderMore() {
@@ -670,6 +720,12 @@ function renderMore() {
     '<div class="prem cut"><h4>ХАБАР PRO</h4>' +
     '<p>Безлимитные алерты по цене<br>Флип-финдер в реальном времени<br>История цен за 90 дней</p>' +
     '<div class="btn fill" style="display:block;margin-top:14px" id="probtn">Скоро · следи в боте</div></div>' +
+    '<div class="label sect" style="margin-top:16px">В разработке</div>' +
+    '<div class="list">' +
+    '<div class="row" style="cursor:default"><span class="rmain"><b>Флип-финдер</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
+    '<div class="row" style="cursor:default"><span class="rmain"><b>Крафт-калькулятор</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
+    '<div class="row" style="cursor:default"><span class="rmain"><b>Стоимость инвентаря по нику</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
+    '</div>' +
     '<div class="hint">🔔 Цены и алерты в чате: <b>@habar_price_bot</b><br><span style="font-size:11px">Не аффилирован с TiMi Studios / Tencent · данные deltaforceapi.com</span></div>';
   $('#probtn').onclick = openBot;
   api('GetSeasonCurrent').then(d => {
@@ -683,7 +739,9 @@ view.addEventListener('click', e => {
   const rm = e.target.closest('[data-rm]');
   if (rm) { handleRemoveFav(rm.dataset.rm); return; }
   const row = e.target.closest('.row');
-  if (row && row.dataset.id) openItem(row.dataset.id);
+  if (!row) return;
+  if (row.dataset.url) { openExternal(row.dataset.url); return; }
+  if (row.dataset.id) openItem(row.dataset.id);
 });
 
 async function handleRemoveFav(id) {
@@ -697,23 +755,19 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
   b.classList.add('on');
   tab = b.dataset.tab;
-  if (tab === 'market') renderMarket();
+  if (tab === 'home') renderHome();
+  else if (tab === 'market') renderMarket();
   else if (tab === 'flips') renderFlips();
-  else if (tab === 'craft') renderCraft();
   else if (tab === 'stash') renderStash();
   else renderMore();
 });
 
 /* ---------- старт ---------- */
+let catError = false;
 (async function init() {
-  view.innerHTML = marketHeader() + '<div class="spin"></div>';
-  bindSearch(); updWipe();
-  try { await loadCatalog(); } catch(e) {
-    view.innerHTML = marketHeader() + '<div class="hint">Не удалось загрузить каталог 😕<br>Проверь интернет и обнови страницу.</div>';
-    bindSearch();
-    return;
-  }
-  renderMarket();
+  renderHome();
+  try { await loadCatalog(); } catch(e) { catError = true; }
+  if (tab === 'market') renderMarket();
 })();
 </script>
 </body>
