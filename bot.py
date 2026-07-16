@@ -91,15 +91,19 @@ async def build_card(item_id: str, item_name: str) -> tuple[str, list[float]]:
     return "\n".join(lines), avgs
 
 
-def card_kb(item_id: str, watched: bool) -> InlineKeyboardMarkup:
+def card_kb(item_id: str, watched: bool, alert=None) -> InlineKeyboardMarkup:
     star = "✓ В избранном" if watched else "⭐ В избранное"
     star_cb = f"unwatch:{item_id}" if watched else f"watch:{item_id}"
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=star, callback_data=star_cb),
-         InlineKeyboardButton(text="🔄 Обновить", callback_data=f"card:{item_id}")],
-        [InlineKeyboardButton(text="📉 Подешевеет", callback_data=f"alset:b:{item_id}"),
-         InlineKeyboardButton(text="📈 Подорожает", callback_data=f"alset:a:{item_id}")],
-    ])
+    rows = [[InlineKeyboardButton(text=star, callback_data=star_cb),
+             InlineKeyboardButton(text="🔄 Обновить", callback_data=f"card:{item_id}")]]
+    if alert:
+        sign = "≤" if alert[0] == "below" else "≥"
+        rows.append([InlineKeyboardButton(
+            text=f"🔕 Отменить слежку ({sign} {fmt(alert[1])})", callback_data=f"alrm:{item_id}")])
+    else:
+        rows.append([InlineKeyboardButton(text="📉 Подешевеет", callback_data=f"alset:b:{item_id}"),
+                     InlineKeyboardButton(text="📈 Подорожает", callback_data=f"alset:a:{item_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 # ---------- FSM ----------
@@ -110,11 +114,21 @@ class AlertForm(StatesGroup):
 
 # ---------- handlers ----------
 
-async def send_alert_presets(m: Message, item_id: str, direction: str):
+async def send_alert_presets(m: Message, user_id: int, item_id: str, direction: str):
     """Предлагает готовые пороги цены кнопками — без ручного ввода."""
     item = await db.get_item(item_id)
     if not item:
         await m.answer("Предмет не найден 😕")
+        return
+    existing = await db.alert_active_for_item(user_id, item_id)
+    if existing:
+        ex_word = "подешевеет до" if existing[0] == "below" else "подорожает до"
+        await m.answer(
+            f"⚠️ Ты уже следишь за <b>{item[1]}</b>: {ex_word} <b>{fmt(existing[1])} ₮</b>.\n"
+            f"Одна слежка на предмет — сначала отмени текущую:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="🔕 Отменить слежку", callback_data=f"alrm:{item_id}")]]),
+        )
         return
     p = await api.get_price(item_id)
     if not p:
@@ -144,6 +158,16 @@ async def send_alert_presets(m: Message, item_id: str, direction: str):
 async def cmd_start(m: Message, command: CommandObject):
     await db.upsert_user(m.from_user.id, m.from_user.username)
     args = command.args or ""
+    if args.startswith("rm_"):
+        item_id = args[3:]
+        item = await db.get_item(item_id)
+        n = await db.alerts_deactivate_item(m.from_user.id, item_id)
+        name = item[1] if item else "предмет"
+        if n:
+            await m.answer(f"🔕 Слежка за <b>{name}</b> отменена.")
+        else:
+            await m.answer(f"За <b>{name}</b> активной слежки не было — всё чисто.")
+        return
     if args.startswith("al_"):
         parts = args.split("_")
         if len(parts) >= 3 and parts[1] in ("d", "u"):
@@ -155,10 +179,14 @@ async def cmd_start(m: Message, command: CommandObject):
                 if item:
                     threshold = float(parts[3])
                     word = "подешевеет до" if direction == "below" else "подорожает до"
-                    if await db.alert_exists(m.from_user.id, item_id, direction, threshold):
+                    existing = await db.alert_active_for_item(m.from_user.id, item_id)
+                    if existing:
+                        ex_word = "подешевеет до" if existing[0] == "below" else "подорожает до"
                         await m.answer(
-                            f"🔁 Это уведомление уже стоит: <b>{item[1]}</b> {word} <b>{fmt(threshold)} ₮</b>. "
-                            f"Всё под контролем! Список: /alerts"
+                            f"⚠️ Ты уже следишь за <b>{item[1]}</b>: {ex_word} <b>{fmt(existing[1])} ₮</b>.\n"
+                            f"Одна слежка на предмет — сначала отмени текущую:",
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                                InlineKeyboardButton(text="🔕 Отменить слежку", callback_data=f"alrm:{item_id}")]]),
                         )
                         return
                     await db.alert_add(m.from_user.id, item_id, direction, threshold)
@@ -169,7 +197,7 @@ async def cmd_start(m: Message, command: CommandObject):
                         f"<i>Пуш придёт прямо сюда. Твои уведомления: /alerts</i>"
                     )
                     return
-            await send_alert_presets(m, item_id, direction)
+            await send_alert_presets(m, m.from_user.id, item_id, direction)
             return
     n = await db.items_count()
     await m.answer(
@@ -239,9 +267,9 @@ async def alert_threshold(m: Message, state: FSMContext):
     data = await state.get_data()
     direction = data.get("direction", "below")
     word = "подешевеет до" if direction == "below" else "подорожает до"
-    if await db.alert_exists(m.from_user.id, data["item_id"], direction, threshold):
+    if await db.alert_active_for_item(m.from_user.id, data["item_id"]):
         await state.clear()
-        await m.answer(f"🔁 Это уведомление уже стоит. Список: /alerts")
+        await m.answer("⚠️ Ты уже следишь за этим предметом — одна слежка на предмет. Список: /alerts")
         return
     await db.alert_add(m.from_user.id, data["item_id"], direction, threshold)
     await db.watch_add(m.from_user.id, data["item_id"])
@@ -271,7 +299,8 @@ async def search(m: Message):
         item_id, name = results[0]
         text, _ = await build_card(item_id, name)
         watched = await db.is_watched(m.from_user.id, item_id)
-        await m.answer(text, reply_markup=card_kb(item_id, watched))
+        alert = await db.alert_active_for_item(m.from_user.id, item_id)
+        await m.answer(text, reply_markup=card_kb(item_id, watched, alert))
         return
     kb = [[InlineKeyboardButton(text=name, callback_data=f"card:{item_id}")]
           for item_id, name in results]
@@ -289,10 +318,11 @@ async def cb_card(c: CallbackQuery):
         return
     text, _ = await build_card(item_id, item[1])
     watched = await db.is_watched(c.from_user.id, item_id)
+    alert = await db.alert_active_for_item(c.from_user.id, item_id)
     try:
-        await c.message.edit_text(text, reply_markup=card_kb(item_id, watched))
+        await c.message.edit_text(text, reply_markup=card_kb(item_id, watched, alert))
     except Exception:
-        await c.message.answer(text, reply_markup=card_kb(item_id, watched))
+        await c.message.answer(text, reply_markup=card_kb(item_id, watched, alert))
     await c.answer()
 
 
@@ -300,23 +330,41 @@ async def cb_card(c: CallbackQuery):
 async def cb_watch(c: CallbackQuery):
     item_id = c.data.split(":", 1)[1]
     await db.watch_add(c.from_user.id, item_id)
-    await c.answer("Добавил в вотчлист ⭐")
-    await c.message.edit_reply_markup(reply_markup=card_kb(item_id, True))
+    alert = await db.alert_active_for_item(c.from_user.id, item_id)
+    await c.answer("Добавил в избранное ⭐")
+    await c.message.edit_reply_markup(reply_markup=card_kb(item_id, True, alert))
 
 
 @router.callback_query(F.data.startswith("unwatch:"))
 async def cb_unwatch(c: CallbackQuery):
     item_id = c.data.split(":", 1)[1]
     await db.watch_remove(c.from_user.id, item_id)
-    await c.answer("Убрал из вотчлиста")
-    await c.message.edit_reply_markup(reply_markup=card_kb(item_id, False))
+    alert = await db.alert_active_for_item(c.from_user.id, item_id)
+    await c.answer("Убрал из избранного")
+    await c.message.edit_reply_markup(reply_markup=card_kb(item_id, False, alert))
 
 
 @router.callback_query(F.data.startswith("alset:"))
 async def cb_alset(c: CallbackQuery):
     _, d, item_id = c.data.split(":", 2)
-    await send_alert_presets(c.message, item_id, "below" if d == "b" else "above")
+    await send_alert_presets(c.message, c.from_user.id, item_id, "below" if d == "b" else "above")
     await c.answer()
+
+
+@router.callback_query(F.data.startswith("alrm:"))
+async def cb_alrm(c: CallbackQuery):
+    item_id = c.data.split(":", 1)[1]
+    n = await db.alerts_deactivate_item(c.from_user.id, item_id)
+    item = await db.get_item(item_id)
+    name = item[1] if item else "предмет"
+    watched = await db.is_watched(c.from_user.id, item_id)
+    try:
+        await c.message.edit_reply_markup(reply_markup=card_kb(item_id, watched, None))
+    except Exception:
+        pass
+    await c.answer("Слежка отменена 🔕" if n else "Активной слежки не было")
+    if n:
+        await c.message.answer(f"🔕 Слежка за <b>{name}</b> отменена.")
 
 
 @router.callback_query(F.data.startswith("mkal:"))
@@ -328,8 +376,8 @@ async def cb_mkal(c: CallbackQuery):
         await c.answer("Предмет не найден", show_alert=True)
         return
     word = "подешевеет до" if direction == "below" else "подорожает до"
-    if await db.alert_exists(c.from_user.id, item_id, direction, float(threshold)):
-        await c.answer("Уже стоит 😉", show_alert=False)
+    if await db.alert_active_for_item(c.from_user.id, item_id):
+        await c.answer("У тебя уже есть слежка на этот предмет 😉", show_alert=True)
         return
     await db.alert_add(c.from_user.id, item_id, direction, float(threshold))
     await db.watch_add(c.from_user.id, item_id)

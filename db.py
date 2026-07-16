@@ -133,6 +133,26 @@ async def alert_exists(tg_id: int, item_id: str, direction: str, threshold: floa
         return await cur.fetchone() is not None
 
 
+async def alert_active_for_item(tg_id: int, item_id: str):
+    """Активная слежка юзера за предметом: (direction, threshold) или None."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT direction, threshold FROM alerts WHERE tg_id=? AND item_id=? AND active=1 LIMIT 1",
+            (tg_id, item_id),
+        )
+        return await cur.fetchone()
+
+
+async def alerts_deactivate_item(tg_id: int, item_id: str) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE alerts SET active=0 WHERE tg_id=? AND item_id=? AND active=1",
+            (tg_id, item_id),
+        )
+        await db.commit()
+        return cur.rowcount
+
+
 async def alert_add(tg_id: int, item_id: str, direction: str, threshold: float) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(

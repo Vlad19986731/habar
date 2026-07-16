@@ -100,6 +100,11 @@
   }
   .rmain span{display:block; color:var(--text2); font-size:10.5px; font-weight:600; margin-top:1px}
   .rspark{width:56px; height:20px; flex:none}
+  .rmx{
+    flex:none; color:var(--text3); font-size:15px; font-weight:700;
+    padding:8px 2px 8px 8px; margin-right:-4px;
+  }
+  .rmx:active{color:var(--red)}
   .rprice{text-align:right; flex:none; min-width:70px}
   .rprice b{display:block; color:var(--white); font-size:13.5px; font-weight:800}
   .rprice span{display:block; font-size:11px; font-weight:700; margin-top:1px}
@@ -324,25 +329,34 @@ function miniSvg(values, color) {
   return '<svg viewBox="0 0 56 20" class="rspark"><polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="1.5"/></svg>';
 }
 
-/* ---------- мои уведомления (локально) ---------- */
+/* ---------- моя слежка (локально, максимум одна на предмет) ---------- */
 function alGetAll() {
-  try { return JSON.parse(localStorage.getItem('myalerts') || '{}'); } catch(e) { return {}; }
+  try {
+    const a = JSON.parse(localStorage.getItem('myalerts') || '{}');
+    for (const k in a) if (Array.isArray(a[k])) a[k] = a[k][0]; // миграция со старого формата
+    return a;
+  } catch(e) { return {}; }
 }
-function alAdd(id, dir, thr) {
-  const a = alGetAll();
-  (a[id] = a[id] || []).push({d: dir, t: thr});
+function alGet(id) { return alGetAll()[id] || null; }
+function alSet(id, dir, thr) {
+  const a = alGetAll(); a[id] = {d: dir, t: thr};
+  localStorage.setItem('myalerts', JSON.stringify(a));
+}
+function alRemove(id) {
+  const a = alGetAll(); delete a[id];
   localStorage.setItem('myalerts', JSON.stringify(a));
 }
 
 /* ---------- строки списка ---------- */
-function rowHtml(it) {
-  const bell = alGetAll()[it.id] ? ' <span style="color:var(--orange)">🔔</span>' : '';
+function rowHtml(it, removable) {
+  const bell = alGet(it.id) ? ' <span style="color:var(--orange)">🔔</span>' : '';
+  const rm = removable ? '<span class="rmx" data-rm="' + it.id + '">✕</span>' : '';
   return '<button class="row" data-id="' + it.id + '">' +
     '<span class="well"><span class="ab">' + abbr(it.name) + '</span><img loading="lazy" src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
     '<span class="rmain"><b>' + it.name + bell + '</b><span id="sub-' + it.id + '">…</span></span>' +
     '<span id="spark-' + it.id + '"></span>' +
     '<span class="rprice"><b class="num" id="p-' + it.id + '">·····</b><span class="num" id="d-' + it.id + '"></span></span>' +
-    '</button>';
+    rm + '</button>';
 }
 
 async function fillPrices(ids, withTrend) {
@@ -487,6 +501,19 @@ async function openItem(id) {
   const wl = await wlGet();
   const inWl = wl.includes(id);
 
+  const myAl = alGet(id);
+  const alertBlock = myAl
+    ? '<div class="label" style="margin-top:14px">🔔 Слежу за ценой</div>' +
+      '<div class="signal" style="background:var(--green-bg);margin-top:8px"><i style="background:var(--green)"></i><b style="color:var(--green)">' +
+        (myAl.d === 'd' ? 'Подешевеет до ' : 'Подорожает до ') + fmt(myAl.t) + ' ₮</b></div>' +
+      '<div class="btns" style="margin-top:8px"><button class="btn" id="alrm">🔕 Отменить слежку</button></div>'
+    : '<div class="label" style="margin-top:14px">🔔 Сообщить, когда цена:</div>' +
+      '<div class="btns" style="margin-top:8px">' +
+        '<button class="btn" id="aldown">📉 Подешевеет</button>' +
+        '<button class="btn" id="alup">📈 Подорожает</button>' +
+      '</div>' +
+      '<div id="alpick"></div>';
+
   view.innerHTML = backBtn() +
     '<div class="card cut" style="margin-top:6px"><div class="strip"></div>' +
     '<div class="chead">' +
@@ -498,17 +525,10 @@ async function openItem(id) {
     chartSvg(avgs) +
     '<div class="chart-meta"><span>' + (p.referencePrice ? 'РЕФ. ЦЕНА ' + fmt(p.referencePrice) : '') + '</span><span>7 ДНЕЙ</span></div>' +
     '<div class="signal" style="background:' + sigBg + '"><i style="background:' + sigDot + '"></i><b style="color:' + sigC + '">' + sigTxt + '</b></div>' +
-    ((alGetAll()[id] || []).length ? '<div class="src" style="color:var(--orange);margin-top:8px">🔔 Слежу: ' +
-      alGetAll()[id].map(a => (a.d === 'd' ? 'подешевеет до ' : 'подорожает до ') + fmt(a.t) + ' ₮').join(' · ') + '</div>' : '') +
     '<div class="btns">' +
       '<button class="btn ' + (inWl?'fill':'') + '" id="wlbtn">' + (inWl ? '✓ В избранном' : '⭐ В избранное') + '</button>' +
     '</div>' +
-    '<div class="label" style="margin-top:14px">🔔 Сообщить, когда цена:</div>' +
-    '<div class="btns" style="margin-top:8px">' +
-      '<button class="btn" id="aldown">📉 Подешевеет</button>' +
-      '<button class="btn" id="alup">📈 Подорожает</button>' +
-    '</div>' +
-    '<div id="alpick"></div>' +
+    alertBlock +
     '<div class="src">Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com</div>' +
     '</div>';
   $('#bk').onclick = goBack;
@@ -521,8 +541,18 @@ async function openItem(id) {
     b.classList.toggle('fill', w.includes(id));
     if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch(e){} }
   };
-  $('#aldown').onclick = () => showAlertPicker(id, 'd', price);
-  $('#alup').onclick = () => showAlertPicker(id, 'u', price);
+  if (myAl) {
+    $('#alrm').onclick = () => {
+      alRemove(id);
+      const btn = document.getElementById('alrm');
+      if (btn) btn.closest('.btns').outerHTML =
+        '<div class="signal" style="background:var(--divider);margin-top:8px"><i style="background:var(--text2)"></i><b style="color:var(--text2)">🔕 Слежка отменена</b></div>';
+      setTimeout(() => openBotLink('rm_' + id), 450);
+    };
+  } else {
+    $('#aldown').onclick = () => showAlertPicker(id, 'd', price);
+    $('#alup').onclick = () => showAlertPicker(id, 'u', price);
+  }
 }
 
 function showAlertPicker(id, dir, price) {
@@ -557,14 +587,14 @@ async function pickAlert(id, dir, thr) {
   const confirmHtml = ok => '<div class="signal" style="background:var(--green-bg);margin-top:12px">' +
     '<i style="background:var(--green)"></i><b style="color:var(--green)">' +
     (ok ? '✅ Принято! Сообщу, когда ' : '🔁 Уже слежу — сообщу, когда ') + word + ' ' + fmt(thr) + ' ₮</b></div>';
-  // защита от повторных нажатий: такой порог уже стоит
-  if ((alGetAll()[id] || []).some(a => a.d === dir && a.t === thr)) {
+  // одна слежка на предмет: если уже есть — не создаём вторую
+  if (alGet(id)) {
     if (box) box.innerHTML = confirmHtml(false);
     return;
   }
   let w = await wlGet();
   if (!w.includes(id)) { w.push(id); wlSet(w); }   // слежу за ценой = в избранном
-  alAdd(id, dir, thr);
+  alSet(id, dir, thr);
   if (box) box.innerHTML = confirmHtml(true);      // кнопки исчезают -> дубль не накликать
   if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
   setTimeout(() => openBotLink('al_' + dir + '_' + id + '_' + thr), 450);
@@ -595,8 +625,8 @@ async function renderStash() {
     return;
   }
   const items = wl.map(id => CATALOG.find(i => i.id === id)).filter(Boolean);
-  view.innerHTML = head + '<div class="list" style="margin-top:16px">' + items.map(rowHtml).join('') + '</div>' +
-    '<div class="hint" style="padding:14px">🔔 Хочешь уведомление? Открой предмет → «📉 Подешевеет» или «📈 Подорожает»</div>';
+  view.innerHTML = head + '<div class="list" style="margin-top:16px">' + items.map(it => rowHtml(it, true)).join('') + '</div>' +
+    '<div class="hint" style="padding:14px">✕ — убрать из избранного · если стоит слежка 🔔, сначала отмени её в карточке</div>';
   fillPrices(items.map(i=>i.id), true);
 }
 
@@ -650,9 +680,18 @@ function renderMore() {
 
 /* ---------- события ---------- */
 view.addEventListener('click', e => {
+  const rm = e.target.closest('[data-rm]');
+  if (rm) { handleRemoveFav(rm.dataset.rm); return; }
   const row = e.target.closest('.row');
   if (row && row.dataset.id) openItem(row.dataset.id);
 });
+
+async function handleRemoveFav(id) {
+  if (alGet(id)) { openItem(id); return; } // активная слежка отменяется в карточке
+  let w = await wlGet();
+  wlSet(w.filter(x => x !== id));
+  renderStash();
+}
 
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
