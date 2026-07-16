@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (CallbackQuery, InlineKeyboardButton,
@@ -92,12 +92,13 @@ async def build_card(item_id: str, item_name: str) -> tuple[str, list[float]]:
 
 
 def card_kb(item_id: str, watched: bool) -> InlineKeyboardMarkup:
-    star = "✅ В вотчлисте" if watched else "⭐ В вотчлист"
+    star = "✓ В избранном" if watched else "⭐ В избранное"
     star_cb = f"unwatch:{item_id}" if watched else f"watch:{item_id}"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=star, callback_data=star_cb),
-         InlineKeyboardButton(text="🔔 Алерт", callback_data=f"alert:{item_id}")],
-        [InlineKeyboardButton(text="🔄 Обновить", callback_data=f"card:{item_id}")],
+         InlineKeyboardButton(text="🔄 Обновить", callback_data=f"card:{item_id}")],
+        [InlineKeyboardButton(text="📉 Подешевеет", callback_data=f"alset:b:{item_id}"),
+         InlineKeyboardButton(text="📈 Подорожает", callback_data=f"alset:a:{item_id}")],
     ])
 
 
@@ -109,17 +110,54 @@ class AlertForm(StatesGroup):
 
 # ---------- handlers ----------
 
+async def send_alert_presets(m: Message, item_id: str, direction: str):
+    """Предлагает готовые пороги цены кнопками — без ручного ввода."""
+    item = await db.get_item(item_id)
+    if not item:
+        await m.answer("Предмет не найден 😕")
+        return
+    p = await api.get_price(item_id)
+    if not p:
+        await m.answer("Не удалось получить цену, попробуй позже 😕")
+        return
+    price = p["price"]
+    d = "b" if direction == "below" else "a"
+    if direction == "below":
+        t1, t2 = price * 0.95, price * 0.90
+        word, s1, s2 = "подешевеет до", "−5%", "−10%"
+    else:
+        t1, t2 = price * 1.05, price * 1.10
+        word, s1, s2 = "подорожает до", "+5%", "+10%"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"{s1} · {fmt(t1)} ₮", callback_data=f"mkal:{d}:{item_id}:{int(t1)}")],
+        [InlineKeyboardButton(text=f"{s2} · {fmt(t2)} ₮", callback_data=f"mkal:{d}:{item_id}:{int(t2)}")],
+        [InlineKeyboardButton(text="✍️ Указать свою цену", callback_data=f"alcust:{d}:{item_id}")],
+    ])
+    await m.answer(
+        f"🔔 <b>{item[1]}</b>\nСейчас: <b>{fmt(price)} ₮</b>\n\n"
+        f"Сообщу, когда {word}:",
+        reply_markup=kb,
+    )
+
+
 @router.message(CommandStart())
-async def cmd_start(m: Message):
+async def cmd_start(m: Message, command: CommandObject):
     await db.upsert_user(m.from_user.id, m.from_user.username)
+    args = command.args or ""
+    if args.startswith("al_"):
+        parts = args.split("_", 2)
+        if len(parts) == 3 and parts[1] in ("d", "u"):
+            direction = "below" if parts[1] == "d" else "above"
+            await send_alert_presets(m, parts[2], direction)
+            return
     n = await db.items_count()
     await m.answer(
-        "🎯 <b>DF Аукцион</b> — цены аукциона Delta Force прямо в Telegram.\n\n"
+        "🎯 <b>Хабар</b> — цены аукциона Delta Force прямо в Telegram.\n\n"
         "Просто напиши название предмета (можно по-русски):\n"
         "<code>вектор</code>, <code>дигл</code>, <code>gold ammo</code>, <code>helmet</code>\n\n"
         "Команды:\n"
-        "/watch — твой вотчлист\n"
-        "/alerts — твои алерты\n"
+        "/watch — избранное\n"
+        "/alerts — уведомления о ценах\n"
         "/wipe — сколько до вайпа\n\n"
         f"<i>В базе {n} предметов · данные: deltaforceapi.com</i>"
     )
@@ -145,9 +183,9 @@ async def cmd_wipe(m: Message):
 async def cmd_watch(m: Message):
     rows = await db.watch_list(m.from_user.id)
     if not rows:
-        await m.answer("Вотчлист пуст. Найди предмет и нажми «⭐ В вотчлист».")
+        await m.answer("В избранном пусто. Найди предмет и нажми «⭐ В избранное».")
         return
-    lines = ["⭐ <b>Твой вотчлист</b>\n"]
+    lines = ["⭐ <b>Избранное</b>\n"]
     for item_id, name in rows[:20]:
         p = await api.get_price(item_id)
         lines.append(f"• {name} — <b>{fmt(p['price'])}</b>" if p else f"• {name} — н/д")
@@ -159,30 +197,30 @@ async def cmd_watch(m: Message):
 async def cmd_alerts(m: Message):
     rows = await db.alerts_for_user(m.from_user.id)
     if not rows:
-        await m.answer("Алертов нет. Найди предмет и нажми «🔔 Алерт».")
+        await m.answer("Уведомлений нет. Найди предмет и нажми «📉 Подешевеет» или «📈 Подорожает».")
         return
-    kb, lines = [], ["🔔 <b>Твои алерты</b>\n"]
+    kb, lines = [], ["🔔 <b>Твои уведомления</b>\n"]
     for aid, name, direction, threshold in rows:
-        sign = "ниже" if direction == "below" else "выше"
-        lines.append(f"#{aid} · {name} — {sign} {fmt(threshold)}")
+        sign = "подешевеет до" if direction == "below" else "подорожает до"
+        lines.append(f"#{aid} · {name} — {sign} {fmt(threshold)} ₮")
         kb.append([InlineKeyboardButton(text=f"❌ Удалить #{aid}", callback_data=f"delalert:{aid}")])
     await m.answer("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 
 @router.message(AlertForm.threshold)
 async def alert_threshold(m: Message, state: FSMContext):
-    text = m.text.strip().replace(" ", "")
-    direction = "above" if text.startswith("+") else "below"
+    text = m.text.strip().replace(" ", "").lstrip("+")
     try:
-        threshold = float(text.lstrip("+"))
+        threshold = float(text)
     except ValueError:
-        await m.answer("Нужно число, напр. <code>150000</code> или <code>+200000</code> (для «выше»).")
+        await m.answer("Нужно просто число, например <code>150000</code>.")
         return
     data = await state.get_data()
+    direction = data.get("direction", "below")
     await db.alert_add(m.from_user.id, data["item_id"], direction, threshold)
     await state.clear()
-    sign = "опустится ниже" if direction == "below" else "поднимется выше"
-    await m.answer(f"🔔 Готово! Сообщу, когда <b>{data['item_name']}</b> {sign} <b>{fmt(threshold)}</b>.")
+    word = "подешевеет до" if direction == "below" else "подорожает до"
+    await m.answer(f"✅ Принято! Сообщу, когда <b>{data['item_name']}</b> {word} <b>{fmt(threshold)} ₮</b>.")
 
 
 @router.message(F.text & ~F.text.startswith("/"))
@@ -245,20 +283,44 @@ async def cb_unwatch(c: CallbackQuery):
     await c.message.edit_reply_markup(reply_markup=card_kb(item_id, False))
 
 
-@router.callback_query(F.data.startswith("alert:"))
-async def cb_alert(c: CallbackQuery, state: FSMContext):
-    item_id = c.data.split(":", 1)[1]
+@router.callback_query(F.data.startswith("alset:"))
+async def cb_alset(c: CallbackQuery):
+    _, d, item_id = c.data.split(":", 2)
+    await send_alert_presets(c.message, item_id, "below" if d == "b" else "above")
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("mkal:"))
+async def cb_mkal(c: CallbackQuery):
+    _, d, item_id, threshold = c.data.split(":", 3)
+    direction = "below" if d == "b" else "above"
     item = await db.get_item(item_id)
     if not item:
         await c.answer("Предмет не найден", show_alert=True)
         return
+    await db.alert_add(c.from_user.id, item_id, direction, float(threshold))
+    word = "подешевеет до" if direction == "below" else "подорожает до"
+    await c.message.edit_text(
+        f"✅ Принято! Сообщу, когда <b>{item[1]}</b> {word} <b>{fmt(float(threshold))} ₮</b>.\n"
+        f"<i>Проверяю цены каждые {COLLECT_EVERY_MIN} минут. Список: /alerts</i>"
+    )
+    await c.answer("Уведомление создано 🔔")
+
+
+@router.callback_query(F.data.startswith("alcust:"))
+async def cb_alcust(c: CallbackQuery, state: FSMContext):
+    _, d, item_id = c.data.split(":", 2)
+    item = await db.get_item(item_id)
+    if not item:
+        await c.answer("Предмет не найден", show_alert=True)
+        return
+    direction = "below" if d == "b" else "above"
     await state.set_state(AlertForm.threshold)
-    await state.update_data(item_id=item_id, item_name=item[1])
+    await state.update_data(item_id=item_id, item_name=item[1], direction=direction)
+    word = "подешевеет до этой цены" if direction == "below" else "подорожает до этой цены"
     await c.message.answer(
-        f"🔔 Алерт для <b>{item[1]}</b>\n\n"
-        "Введи порог цены числом:\n"
-        "• <code>150000</code> — сообщить, когда цена упадёт НИЖЕ\n"
-        "• <code>+200000</code> — когда поднимется ВЫШЕ"
+        f"✍️ Напиши цену числом, например <code>150000</code>.\n"
+        f"Сообщу, когда <b>{item[1]}</b> {word}."
     )
     await c.answer()
 
@@ -304,13 +366,13 @@ async def collect_and_check(bot: Bot):
             continue
         hit = price <= threshold if direction == "below" else price >= threshold
         if hit:
-            sign = "упал ниже" if direction == "below" else "поднялся выше"
+            emoji = "📉" if direction == "below" else "📈"
+            word = "подешевел до" if direction == "below" else "подорожал до"
             try:
                 await bot.send_message(
                     tg_id,
-                    f"🔔 <b>Сработал алерт!</b>\n\n"
-                    f"<b>{name}</b> {sign} <b>{fmt(threshold)}</b>\n"
-                    f"Цена сейчас: <b>{fmt(price)}</b>",
+                    f"{emoji} <b>{name}</b> {word} <b>{fmt(price)} ₮</b>!\n"
+                    f"<i>Твой порог: {fmt(threshold)} ₮</i>",
                 )
                 await db.alert_deactivate(alert_id)
             except Exception:

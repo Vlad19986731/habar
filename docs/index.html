@@ -489,7 +489,11 @@ async function openItem(id) {
     '<div class="signal" style="background:' + sigBg + '"><i style="background:' + sigDot + '"></i><b style="color:' + sigC + '">' + sigTxt + '</b></div>' +
     '<div class="btns">' +
       '<button class="btn ' + (inWl?'fill':'') + '" id="wlbtn">' + (inWl ? '✓ В избранном' : '⭐ В избранное') + '</button>' +
-      '<button class="btn" id="albtn">🔔 Сообщить о цене</button>' +
+    '</div>' +
+    '<div class="label" style="margin-top:14px">🔔 Сообщить, когда цена:</div>' +
+    '<div class="btns" style="margin-top:8px">' +
+      '<button class="btn" id="aldown">📉 Подешевеет</button>' +
+      '<button class="btn" id="alup">📈 Подорожает</button>' +
     '</div>' +
     '<div class="src">Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com</div>' +
     '</div>';
@@ -503,7 +507,14 @@ async function openItem(id) {
     b.classList.toggle('fill', w.includes(id));
     if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch(e){} }
   };
-  $('#albtn').onclick = openBot;
+  $('#aldown').onclick = () => openBotLink('al_d_' + id);
+  $('#alup').onclick = () => openBotLink('al_u_' + id);
+}
+
+function openBotLink(payload) {
+  const url = BOT_LINK + '?start=' + payload;
+  if (tg && tg.openTelegramLink) { try { tg.openTelegramLink(url); return; } catch(e){} }
+  window.open(url, '_blank');
 }
 
 function backBtn() {
@@ -526,7 +537,7 @@ async function renderStash() {
   }
   const items = wl.map(id => CATALOG.find(i => i.id === id)).filter(Boolean);
   view.innerHTML = head + '<div class="list" style="margin-top:16px">' + items.map(rowHtml).join('') + '</div>' +
-    '<div class="hint" style="padding:14px">🔔 Хочешь уведомление о цене? Открой предмет → «Сообщить о цене»</div>';
+    '<div class="hint" style="padding:14px">🔔 Хочешь уведомление? Открой предмет → «📉 Подешевеет» или «📈 Подорожает»</div>';
   fillPrices(items.map(i=>i.id), true);
 }
 
