@@ -103,6 +103,31 @@
   .pbar{height:6px; background:var(--well); border-radius:3px; margin-top:12px; overflow:hidden}
   .pbar i{display:block; height:100%; background:var(--orange)}
 
+  /* ---------- рынок: статистика и категории ---------- */
+  .statgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
+  .stat{background:var(--surface); border:1px solid var(--border); border-radius:11px; padding:10px 6px; text-align:center}
+  .stat b{display:block; font-size:15px; letter-spacing:-.01em; color:var(--white)}
+  .stat span{display:block; font-size:9.5px; color:var(--text3); margin-top:3px; font-weight:700; letter-spacing:.06em; text-transform:uppercase}
+  .pulse{display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); animation:pl 1.6s ease-in-out infinite}
+  @keyframes pl{0%,100%{box-shadow:0 0 0 0 rgba(67,221,124,.5)}50%{box-shadow:0 0 0 5px rgba(67,221,124,0)}}
+  .catgrid{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+  .catcard{
+    display:flex; align-items:center; gap:10px; background:var(--surface);
+    border:1px solid var(--border); border-radius:10px; padding:11px 12px;
+    cursor:pointer; font-family:inherit; color:var(--text); text-align:left;
+  }
+  .catcard:active{background:var(--divider)}
+  .catcard .ce{font-size:19px; flex:none}
+  .catcard b{display:block; font-size:12.5px; font-weight:700}
+  .catcard span.cnt{display:block; font-size:10px; color:var(--text2); margin-top:2px; font-weight:600}
+  .chips{display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch}
+  .chip{
+    flex:none; font-size:12px; color:var(--text2); background:var(--surface);
+    border:1px solid var(--border); padding:6px 12px; border-radius:15px;
+    white-space:nowrap; cursor:pointer;
+  }
+  .chip.on{color:#1c1102; background:var(--orange); border-color:var(--orange); font-weight:700}
+
   /* ---------- новостные карточки ---------- */
   .nstack{display:flex; flex-direction:column; gap:8px}
   .ncard{
@@ -286,6 +311,29 @@ async function loadCatalog() {
   localStorage.setItem('cat_v1', JSON.stringify({ts:Date.now(), items:CATALOG}));
 }
 
+/* ---------- категории (вычисляем из названий) ---------- */
+const CATS = [
+  ['weapons','Оружие','🔫'], ['ammo','Патроны','🔻'], ['helmet','Шлемы','🪖'], ['armor','Броня','🦺'],
+  ['gear','Разгрузки и рюкзаки','🎒'], ['keys','Ключи','🗝️'], ['meds','Медицина','💊'],
+  ['optics','Прицелы','🔭'], ['mods','Обвесы','🔧'], ['other','Прочее','💠']
+];
+function classify(lc) {
+  if (/(ammo|\b\d{1,2}(\.\d+)?x\d{2,3}\b|gauge|slug|buckshot|\bfmj\b|\bap\b.*round)/.test(lc)) return 'ammo';
+  if (/helmet|headgear|face shield|\bmask\b/.test(lc)) return 'helmet';
+  if (/armor|\bvest\b|plate carrier/.test(lc)) return 'armor';
+  if (/\brig\b|backpack|\bbag\b|pouch|case\b/.test(lc)) return 'gear';
+  if (/\bkey(card)?\b/.test(lc)) return 'keys';
+  if (/first aid|medkit|bandage|stim|syringe|painkiller|adrenaline|defib|surgical|splint/.test(lc)) return 'meds';
+  if (/scope|sight|optic|reflex|holograph|magnifier|thermal/.test(lc)) return 'optics';
+  if (/barrel|stock|grip|handguard|\brail\b|muzzle|suppressor|silencer|brake|compensator|flash hider|\bmag\b|magazine|c-mag|drum|bolt|buffer|tube|mount|laser|bipod|receiver|adapter|charm|cap\b|lens/.test(lc)) return 'mods';
+  if (/pistol$|rifle$|gun$|shotgun$|carbine$|sniper|revolver$|smg$|launcher$/.test(lc)) return 'weapons';
+  return 'other';
+}
+function ensureCats() {
+  if (CATALOG.length && CATALOG[0].cat === undefined)
+    CATALOG.forEach(i => i.cat = classify(i.lc));
+}
+
 function searchCatalog(q) {
   q = q.trim().toLowerCase();
   if (q.length < 2) return [];
@@ -420,6 +468,8 @@ function marketHeader() {
     '<input class="search" id="q" type="search" placeholder="Поиск: вектор, дигл, gold…" autocomplete="off" value="' + lastQ.replace(/"/g,'&quot;') + '">';
 }
 
+let catFilter = null;
+
 function renderMarket() {
   if (!CATALOG.length) {
     view.innerHTML = marketHeader() + (catError
@@ -427,12 +477,12 @@ function renderMarket() {
       : '<div class="spin"></div>');
     bindSearch(); updWipe(); return;
   }
+  ensureCats();
   const results = lastQ.trim().length >= 2 ? searchCatalog(lastQ) : null;
-  let body;
   if (results && results.length) {
-    body = '<div class="label sect">Найдено · ' + results.length + '</div>' +
-      '<div class="list">' + results.map(rowHtml).join('') + '</div>';
-    view.innerHTML = marketHeader() + body;
+    view.innerHTML = marketHeader() +
+      '<div class="label sect">Найдено · ' + results.length + '</div>' +
+      '<div class="list">' + results.map(it => rowHtml(it)).join('') + '</div>';
     bindSearch(); updWipe();
     fillPrices(results.slice(0,8).map(i=>i.id), false);
     return;
@@ -441,19 +491,43 @@ function renderMarket() {
     view.innerHTML = marketHeader() + '<div class="hint">Ничего не нашёл 😕<br>Попробуй по-английски или короче.</div>';
     bindSearch(); updWipe(); return;
   }
-  const recent = JSON.parse(localStorage.getItem('recent') || '[]')
-    .map(id => CATALOG.find(i => i.id === id)).filter(Boolean);
-  if (recent.length) {
-    body = '<div class="label sect">Недавние</div>' +
-      '<div class="list">' + recent.map(rowHtml).join('') + '</div>';
-    view.innerHTML = marketHeader() + body;
+  if (catFilter) {
+    const c = CATS.find(x => x[0] === catFilter);
+    const items = CATALOG.filter(i => i.cat === catFilter);
+    view.innerHTML = marketHeader() +
+      '<div class="chips" style="margin-top:12px">' +
+        '<span class="chip" data-cat="">‹ Все категории</span>' +
+        '<span class="chip on">' + c[2] + ' ' + c[1] + ' · ' + items.length + '</span>' +
+      '</div>' +
+      '<div class="list" style="margin-top:10px">' + items.slice(0,30).map(it => rowHtml(it)).join('') + '</div>' +
+      (items.length > 30 ? '<div class="hint">Показаны первые 30 — сузь поиском</div>' : '');
     bindSearch(); updWipe();
-    fillPrices(recent.slice(0,8).map(i=>i.id), false);
-  } else {
-    view.innerHTML = marketHeader() + '<div class="hint">В базе <b>' + CATALOG.length + '</b> предметов аукциона.<br>' +
-      'Начни печатать в поиске: <b>вектор</b>, <b>дигл</b>, <b>gold</b>, <b>helmet</b>…</div>';
-    bindSearch(); updWipe();
+    fillPrices(items.slice(0,8).map(i=>i.id), false);
+    return;
   }
+  // главная рынка: статистика + категории
+  const counts = {};
+  CATALOG.forEach(i => { counts[i.cat] = (counts[i.cat] || 0) + 1; });
+  const recent = JSON.parse(localStorage.getItem('recent') || '[]')
+    .map(id => CATALOG.find(i => i.id === id)).filter(Boolean).slice(0, 3);
+  let body =
+    '<div class="statgrid num" style="margin-top:12px">' +
+      '<span class="stat"><b>' + fmt(CATALOG.length) + '</b><span>предметов в торгах</span></span>' +
+      '<span class="stat"><b>' + CATS.filter(c => counts[c[0]]).length + '</b><span>категорий</span></span>' +
+      '<span class="stat"><b><i class="pulse"></i> LIVE</b><span>цены аукциона</span></span>' +
+    '</div>';
+  if (recent.length) {
+    body += '<div class="label sect">Недавние</div><div class="list">' + recent.map(it => rowHtml(it)).join('') + '</div>';
+  }
+  body += '<div class="label sect">Категории</div><div class="catgrid">' +
+    CATS.filter(c => counts[c[0]]).map(c =>
+      '<button class="catcard" data-cat="' + c[0] + '">' +
+      '<span class="ce">' + c[2] + '</span>' +
+      '<span><b>' + c[1] + '</b><span class="cnt num">' + fmt(counts[c[0]]) + ' предм.</span></span>' +
+      '</button>').join('') + '</div>';
+  view.innerHTML = marketHeader() + body;
+  bindSearch(); updWipe();
+  if (recent.length) fillPrices(recent.map(i=>i.id), false);
 }
 
 let wipeCache = null;
@@ -668,19 +742,7 @@ async function renderHome() {
     '<div class="brandrow"><div class="brand">ХАБАР<span>₮</span></div></div>' +
     '<div id="seasoncard" class="card cut" style="margin-top:14px"><div class="strip"></div><div class="spin" style="margin:12px auto"></div></div>' +
     '<div class="label sect">Новости и обновления</div>' +
-    '<div class="nstack" id="newslist"><div class="spin"></div></div>' +
-    '<div class="label sect">Сообщество</div>' +
-    '<div class="btns">' +
-      '<button class="btn" id="lnk-site">Оф. сайт</button>' +
-      '<button class="btn" id="lnk-tg">TG-канал</button>' +
-      '<button class="btn" id="lnk-ds">Discord</button>' +
-    '</div>';
-  $('#lnk-site').onclick = () => openExternal('https://www.playdeltaforce.com/ru/');
-  $('#lnk-tg').onclick = () => {
-    if (tg && tg.openTelegramLink) { try { tg.openTelegramLink('https://t.me/deltaforce_ru'); return; } catch(e){} }
-    window.open('https://t.me/deltaforce_ru', '_blank');
-  };
-  $('#lnk-ds').onclick = () => openExternal('https://discord.com/servers/delta-force-sng-646178429971988500');
+    '<div class="nstack" id="newslist"><div class="spin"></div></div>';
 
   try {
     if (!wipeCache) { const d = await api('GetSeasonCurrent'); wipeCache = d.season; }
@@ -784,6 +846,8 @@ function renderMore() {
 view.addEventListener('click', e => {
   const rm = e.target.closest('[data-rm]');
   if (rm) { handleRemoveFav(rm.dataset.rm); return; }
+  const cc = e.target.closest('[data-cat]');
+  if (cc) { catFilter = cc.dataset.cat || null; renderMarket(); return; }
   const row = e.target.closest('.row,.ncard');
   if (!row) return;
   if (row.dataset.nidx !== undefined) { renderArticle(+row.dataset.nidx); return; }
