@@ -495,6 +495,7 @@ async function openItem(id) {
       '<button class="btn" id="aldown">📉 Подешевеет</button>' +
       '<button class="btn" id="alup">📈 Подорожает</button>' +
     '</div>' +
+    '<div id="alpick"></div>' +
     '<div class="src">Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com</div>' +
     '</div>';
   $('#bk').onclick = goBack;
@@ -507,19 +508,39 @@ async function openItem(id) {
     b.classList.toggle('fill', w.includes(id));
     if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch(e){} }
   };
-  $('#aldown').onclick = () => openBotLink('al_d_' + id);
-  $('#alup').onclick = () => openBotLink('al_u_' + id);
+  $('#aldown').onclick = () => showAlertPicker(id, 'd', price);
+  $('#alup').onclick = () => showAlertPicker(id, 'u', price);
+}
+
+function showAlertPicker(id, dir, price) {
+  const down = dir === 'd';
+  const t1 = Math.round(price * (down ? 0.95 : 1.05));
+  const t2 = Math.round(price * (down ? 0.90 : 1.10));
+  const box = document.getElementById('alpick');
+  if (!box) return;
+  box.innerHTML =
+    '<div class="label" style="margin-top:12px">Сообщу, когда ' + (down ? 'подешевеет до' : 'подорожает до') + ':</div>' +
+    '<div class="btns" style="margin-top:8px">' +
+      '<button class="btn" id="alp1">' + (down ? '−5%' : '+5%') + ' · ' + fmt(t1) + '</button>' +
+      '<button class="btn" id="alp2">' + (down ? '−10%' : '+10%') + ' · ' + fmt(t2) + '</button>' +
+    '</div>' +
+    '<div class="btns" style="margin-top:8px">' +
+      '<input class="search" id="alcustom" type="number" inputmode="numeric" placeholder="Своя цена" style="margin-top:0;flex:1;min-width:0">' +
+      '<button class="btn" id="alok" style="flex:0 0 84px">OK</button>' +
+    '</div>' +
+    '<div class="hint" style="padding:8px 4px 0;text-align:left">Подтверждение придёт в чат с ботом — туда же прилетит пуш, когда цена дойдёт до порога.</div>';
+  document.getElementById('alp1').onclick = () => openBotLink('al_' + dir + '_' + id + '_' + t1);
+  document.getElementById('alp2').onclick = () => openBotLink('al_' + dir + '_' + id + '_' + t2);
+  document.getElementById('alok').onclick = () => {
+    const v = parseInt((document.getElementById('alcustom').value || '').replace(/\D/g, ''), 10);
+    if (v > 0) openBotLink('al_' + dir + '_' + id + '_' + v);
+  };
+  box.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 function openBotLink(payload) {
   const url = BOT_LINK + '?start=' + payload;
-  if (tg && tg.openTelegramLink) {
-    try {
-      tg.openTelegramLink(url);
-      setTimeout(() => { try { tg.close(); } catch(e){} }, 150);
-      return;
-    } catch(e){}
-  }
+  if (tg && tg.openTelegramLink) { try { tg.openTelegramLink(url); return; } catch(e){} }
   window.open(url, '_blank');
 }
 

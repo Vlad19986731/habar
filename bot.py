@@ -145,10 +145,23 @@ async def cmd_start(m: Message, command: CommandObject):
     await db.upsert_user(m.from_user.id, m.from_user.username)
     args = command.args or ""
     if args.startswith("al_"):
-        parts = args.split("_", 2)
-        if len(parts) == 3 and parts[1] in ("d", "u"):
+        parts = args.split("_")
+        if len(parts) >= 3 and parts[1] in ("d", "u"):
             direction = "below" if parts[1] == "d" else "above"
-            await send_alert_presets(m, parts[2], direction)
+            item_id = parts[2]
+            # порог выбран прямо в Mini App -> создаём уведомление сразу
+            if len(parts) >= 4 and parts[3].isdigit():
+                item = await db.get_item(item_id)
+                if item:
+                    threshold = float(parts[3])
+                    await db.alert_add(m.from_user.id, item_id, direction, threshold)
+                    word = "подешевеет до" if direction == "below" else "подорожает до"
+                    await m.answer(
+                        f"✅ Принято! Сообщу, когда <b>{item[1]}</b> {word} <b>{fmt(threshold)} ₮</b>.\n"
+                        f"<i>Пуш придёт прямо сюда. Твои уведомления: /alerts</i>"
+                    )
+                    return
+            await send_alert_presets(m, item_id, direction)
             return
     n = await db.items_count()
     await m.answer(
