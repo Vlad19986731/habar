@@ -488,8 +488,8 @@ async function openItem(id) {
     '<div class="chart-meta"><span>' + (p.referencePrice ? 'РЕФ. ЦЕНА ' + fmt(p.referencePrice) : '') + '</span><span>7 ДНЕЙ</span></div>' +
     '<div class="signal" style="background:' + sigBg + '"><i style="background:' + sigDot + '"></i><b style="color:' + sigC + '">' + sigTxt + '</b></div>' +
     '<div class="btns">' +
-      '<button class="btn ' + (inWl?'fill':'') + '" id="wlbtn">' + (inWl ? '✓ В вотчлисте' : '⭐ В вотчлист') + '</button>' +
-      '<button class="btn" id="albtn">Алерт в боте</button>' +
+      '<button class="btn ' + (inWl?'fill':'') + '" id="wlbtn">' + (inWl ? '✓ В избранном' : '⭐ В избранное') + '</button>' +
+      '<button class="btn" id="albtn">🔔 Сообщить о цене</button>' +
     '</div>' +
     '<div class="src">Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com</div>' +
     '</div>';
@@ -499,7 +499,7 @@ async function openItem(id) {
     if (w.includes(id)) w = w.filter(x => x !== id); else w.push(id);
     wlSet(w);
     const b = $('#wlbtn');
-    b.textContent = w.includes(id) ? '✓ В вотчлисте' : '⭐ В вотчлист';
+    b.textContent = w.includes(id) ? '✓ В избранном' : '⭐ В избранное';
     b.classList.toggle('fill', w.includes(id));
     if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch(e){} }
   };
@@ -519,14 +519,14 @@ function openBot() {
 
 async function renderStash() {
   const wl = await wlGet();
-  const head = '<div class="h1">Стэш</div><div class="sub">Вотчлист · ' + wl.length + ' предм.</div>';
+  const head = '<div class="h1">Стэш</div><div class="sub">Избранное · ' + wl.length + ' предм.</div>';
   if (!wl.length) {
-    view.innerHTML = head + '<div class="hint" style="margin-top:20px">Пусто.<br>Открой предмет на «Рынке» и нажми «⭐ В вотчлист».</div>';
+    view.innerHTML = head + '<div class="hint" style="margin-top:20px">Пусто.<br>Открой предмет на «Рынке» и нажми «⭐ В избранное».</div>';
     return;
   }
   const items = wl.map(id => CATALOG.find(i => i.id === id)).filter(Boolean);
   view.innerHTML = head + '<div class="list" style="margin-top:16px">' + items.map(rowHtml).join('') + '</div>' +
-    '<div class="hint" style="padding:14px">🔔 Алерты по цене — в карточке предмета → «Алерт в боте»</div>';
+    '<div class="hint" style="padding:14px">🔔 Хочешь уведомление о цене? Открой предмет → «Сообщить о цене»</div>';
   fillPrices(items.map(i=>i.id), true);
 }
 
