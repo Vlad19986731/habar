@@ -173,6 +173,12 @@
   .well-lg .ab{color:var(--orange); font-size:10px; font-family:ui-monospace,Consolas,monospace}
   .well-lg img{position:absolute; inset:0; width:100%; height:100%; object-fit:contain}
   .cname{color:var(--text); font-size:16px; font-weight:800; margin-top:2px}
+  .langbtn{
+    flex:none; align-self:flex-start; border:1px solid var(--border); background:var(--well);
+    color:var(--orange); font-size:10px; font-weight:800; letter-spacing:.08em;
+    padding:5px 9px; border-radius:6px; cursor:pointer; font-family:inherit;
+  }
+  .langbtn:active{opacity:.7}
   .bigprice{
     margin-top:14px; color:var(--white); font-size:33px; font-weight:800;
     letter-spacing:-.02em;
@@ -334,6 +340,26 @@ function ensureCats() {
     CATALOG.forEach(i => i.cat = classify(i.lc));
 }
 
+/* ---------- русские названия (словарь от бота) ---------- */
+let RUN = {};
+let nameLang = localStorage.getItem('nlang') || 'en';
+function displayName(it) {
+  return (nameLang === 'ru' && RUN[it.id]) ? RUN[it.id] : it.name;
+}
+async function loadRuNames() {
+  try {
+    const c = JSON.parse(localStorage.getItem('run_v1') || 'null');
+    if (c && Date.now() - c.ts < 864e5) { RUN = c.map; return; }
+  } catch(e){}
+  try {
+    const r = await fetch('names_ru.json?_=' + Date.now());
+    if (r.ok) {
+      RUN = await r.json();
+      localStorage.setItem('run_v1', JSON.stringify({ts: Date.now(), map: RUN}));
+    }
+  } catch(e){}
+}
+
 function searchCatalog(q) {
   q = q.trim().toLowerCase();
   if (q.length < 2) return [];
@@ -417,7 +443,7 @@ function rowHtml(it, removable) {
   const rm = removable ? '<span class="rmx" data-rm="' + it.id + '">✕</span>' : '';
   return '<button class="row" data-id="' + it.id + '">' +
     '<span class="well"><span class="ab">' + abbr(it.name) + '</span><img loading="lazy" src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
-    '<span class="rmain"><b>' + it.name + bell + '</b><span id="sub-' + it.id + '">…</span></span>' +
+    '<span class="rmain"><b>' + displayName(it) + bell + '</b><span id="sub-' + it.id + '">…</span></span>' +
     '<span id="spark-' + it.id + '"></span>' +
     '<span class="rprice"><b class="num" id="p-' + it.id + '">·····</b><span class="num" id="d-' + it.id + '"></span></span>' +
     rm + '</button>';
@@ -510,12 +536,7 @@ function renderMarket() {
   CATALOG.forEach(i => { counts[i.cat] = (counts[i.cat] || 0) + 1; });
   const recent = JSON.parse(localStorage.getItem('recent') || '[]')
     .map(id => CATALOG.find(i => i.id === id)).filter(Boolean).slice(0, 3);
-  let body =
-    '<div class="statgrid num" style="margin-top:12px">' +
-      '<span class="stat"><b>' + fmt(CATALOG.length) + '</b><span>типов предметов</span></span>' +
-      '<span class="stat"><b>' + CATS.filter(c => counts[c[0]]).length + '</b><span>категорий</span></span>' +
-      '<span class="stat"><b><i class="pulse"></i> LIVE</b><span>цены аукциона</span></span>' +
-    '</div>';
+  let body = '';
   if (recent.length) {
     body += '<div class="label sect">Недавние</div><div class="list">' + recent.map(it => rowHtml(it)).join('') + '</div>';
   }
@@ -613,7 +634,8 @@ async function openItem(id) {
     '<div class="card cut" style="margin-top:6px"><div class="strip"></div>' +
     '<div class="chead">' +
       '<span class="well-lg cut-s"><span class="ab">' + abbr(it.name) + '</span><img src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
-      '<div style="flex:1"><div class="label">Аукцион · Операции</div><div class="cname">' + it.name + '</div></div>' +
+      '<div style="flex:1;min-width:0"><div class="label">Аукцион · Операции</div><div class="cname" id="cname">' + displayName(it) + '</div></div>' +
+      (RUN[it.id] ? '<button class="langbtn" id="langbtn">' + (nameLang === 'ru' ? 'EN' : 'RU') + '</button>' : '') +
     '</div>' +
     '<div class="bigprice num">' + fmt(price) + ' <span>₮</span></div>' +
     '<div class="chips">' + chip(d24,'24Ч') + chip(d7,'7Д') + '</div>' +
@@ -627,6 +649,14 @@ async function openItem(id) {
     '<div class="src">Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com</div>' +
     '</div>';
   $('#bk').onclick = goBack;
+  const lb = $('#langbtn');
+  if (lb) lb.onclick = () => {
+    nameLang = nameLang === 'ru' ? 'en' : 'ru';
+    localStorage.setItem('nlang', nameLang);
+    const cn = $('#cname');
+    if (cn) cn.textContent = displayName(it);
+    lb.textContent = nameLang === 'ru' ? 'EN' : 'RU';
+  };
   $('#wlbtn').onclick = async () => {
     let w = await wlGet();
     if (w.includes(id)) w = w.filter(x => x !== id); else w.push(id);
@@ -877,6 +907,7 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
 let catError = false;
 (async function init() {
   renderHome();
+  loadRuNames();
   try { await loadCatalog(); } catch(e) { catError = true; }
   if (tab === 'market') renderMarket();
 })();

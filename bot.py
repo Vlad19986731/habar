@@ -544,6 +544,47 @@ def _parse_tg_posts(page: str, channel_limit: int = 6) -> list[dict]:
     return posts[-channel_limit:][::-1]  # свежие сверху
 
 
+RUNAMES_PATH = REPO_DIR / "docs" / "names_ru.json"
+
+
+async def refresh_ru_names():
+    """Переводит названия всех предметов на русский -> docs/names_ru.json -> git push.
+
+    Переводятся только новые (словарь — накопительный кэш).
+    """
+    try:
+        existing = {}
+        if RUNAMES_PATH.exists():
+            try:
+                existing = json.loads(RUNAMES_PATH.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        rows = await db.all_items()
+        out, new_cnt = {}, 0
+        for item_id, name in rows:
+            if item_id in existing:
+                out[item_id] = existing[item_id]
+                continue
+            ru = await _translate_en_ru(name)
+            out[item_id] = ru if ru and ru != name else name
+            new_cnt += 1
+            if new_cnt % 200 == 0:
+                log.info("Перевод названий: %s новых...", new_cnt)
+            await asyncio.sleep(0.12)
+        if new_cnt == 0 and RUNAMES_PATH.exists():
+            return
+        RUNAMES_PATH.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+        for cmd in (["git", "add", "docs/names_ru.json"],
+                    ["git", "commit", "-m", "names: ru translations update"],
+                    ["git", "push"]):
+            res = subprocess.run(cmd, cwd=str(REPO_DIR), capture_output=True, timeout=120)
+            if res.returncode != 0 and cmd[1] != "commit":
+                log.warning("git %s: %s", cmd[1], res.stderr.decode(errors="ignore")[:200])
+        log.info("Русские названия готовы: всего %s, новых %s", len(out), new_cnt)
+    except Exception:
+        log.exception("Не удалось обновить русские названия")
+
+
 async def refresh_news():
     """Каждые 6 часов: Steam-патчи + RU-канал -> docs/news.json -> git push.
 
@@ -645,8 +686,10 @@ async def main():
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(refresh_items, "interval", hours=24)
     scheduler.add_job(refresh_news, "interval", hours=6)
+    scheduler.add_job(refresh_ru_names, "interval", hours=24)
     scheduler.add_job(collect_and_check, "interval", minutes=COLLECT_EVERY_MIN, args=[bot])
     scheduler.start()
+    asyncio.get_running_loop().create_task(refresh_ru_names())
 
     log.info("Бот запущен")
     await dp.start_polling(bot)

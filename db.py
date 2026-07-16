@@ -87,6 +87,12 @@ async def get_item(item_id: str) -> tuple | None:
         return await cur.fetchone()
 
 
+async def all_items() -> list[tuple]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT id, name FROM items")
+        return await cur.fetchall()
+
+
 async def items_count() -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute("SELECT COUNT(*) FROM items")
