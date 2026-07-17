@@ -76,6 +76,11 @@
   .brandrow{display:flex; align-items:center; justify-content:space-between}
   .brand{color:var(--text); font-size:20px; font-weight:800; letter-spacing:.02em}
   .brand span{color:var(--orange)}
+  .mkttitle{
+    text-align:center; color:var(--text); font-size:19px; font-weight:800;
+    letter-spacing:.02em; padding:2px 0 2px;
+  }
+  .mkttitle span{color:var(--orange); margin-left:2px}
   .wipe{
     background:var(--surface); border:1px solid var(--border); color:var(--amber);
     font-size:10.5px; font-weight:800; padding:6px 10px; border-radius:0;
@@ -647,8 +652,7 @@ async function fillPrices(ids, withTrend) {
 let tab = 'home', lastQ = '';
 
 function marketHeader() {
-  return '<div class="brandrow"><div class="brand">ХАБАР<span>₮</span></div>' +
-    '<div class="wipe num" id="wipe">⏳ …</div></div>' +
+  return '<div class="mkttitle">Рынок<span>₮</span></div>' +
     '<input class="search" id="q" type="search" placeholder="Поиск: вектор, дигл, gold…" autocomplete="off" value="' + lastQ.replace(/"/g,'&quot;') + '">';
 }
 
