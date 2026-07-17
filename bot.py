@@ -235,8 +235,8 @@ async def cmd_start(m: Message, command: CommandObject):
         "🎒 Стоимость твоего инвентаря и статистика\n"
         "🔔 Слежка за ценами — сообщим, когда предмет подешевеет\n\n"
         "И это только старт — дальше больше 🚀\n\n"
-        "<i>Просто напиши название предмета (можно по-русски: «вектор», «дигл», «шлем») "
-        "или жми кнопку ниже 👇</i>",
+        "<i>Всё внутри приложения — жми «Открыть приложение» 👇\n"
+        "А сюда будут приходить уведомления о ценах.</i>",
         reply_markup=kb,
     )
 
@@ -295,16 +295,11 @@ async def cmd_wipe(m: Message):
 
 @router.message(Command("watch"))
 async def cmd_watch(m: Message):
-    rows = await db.watch_list(m.from_user.id)
-    if not rows:
-        await m.answer("В избранном пусто. Найди предмет и нажми «⭐ В избранное».")
-        return
-    lines = ["⭐ <b>Избранное</b>\n"]
-    for item_id, name in rows[:20]:
-        p = await api.get_price(item_id)
-        lines.append(f"• {name} — <b>{fmt(p['price'])}</b>" if p else f"• {name} — н/д")
-        await asyncio.sleep(API_POLITE_DELAY)
-    await m.answer("\n".join(lines))
+    """Избранное — в приложении."""
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="⭐ Открыть избранное",
+                             web_app=WebAppInfo(url=APP_URL + "#fav"))]])
+    await m.answer("⭐ Избранное и слежка за ценами — в приложении:", reply_markup=kb)
 
 
 @router.message(Command("alerts"))
@@ -364,31 +359,16 @@ def remember_ephemeral(chat_id: int, *msg_ids) -> None:
 
 @router.message(F.text & ~F.text.startswith("/"))
 async def search(m: Message):
-    await sweep_ephemeral(m.bot, m.chat.id)   # убрать прошлую карточку + запрос
-    results = []
-    for variant in normalize_query(m.text):
-        results = await db.search_items(variant)
-        if results:
-            break
-    if not results:
-        sent = await m.answer(
-            "Не нашёл 😕 Попробуй по-английски или короче: "
-            "<code>vector</code>, <code>helmet</code>, <code>gold</code>\n\n"
-            "<i>Если предмет точно есть — напиши как ты его искал, добавим алиас.</i>"
-        )
-        remember_ephemeral(m.chat.id, m.message_id, sent.message_id)
-        return
-    if len(results) == 1:
-        item_id, name = results[0]
-        text, _ = await build_card(item_id, name)
-        watched = await db.is_watched(m.from_user.id, item_id)
-        alert = await db.alert_active_for_item(m.from_user.id, item_id)
-        sent = await m.answer(text, reply_markup=card_kb(item_id, watched, alert))
-        remember_ephemeral(m.chat.id, m.message_id, sent.message_id)
-        return
-    kb = [[InlineKeyboardButton(text=name, callback_data=f"card:{item_id}")]
-          for item_id, name in results]
-    sent = await m.answer("Уточни, что именно:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    """Поиск переехал в приложение — мягко направляем туда."""
+    await sweep_ephemeral(m.bot, m.chat.id)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🔍 Найти в приложении",
+                             web_app=WebAppInfo(url=APP_URL + "#market"))]])
+    sent = await m.answer(
+        "🔍 Поиск цен, графики и слежка — в приложении.\n"
+        "Там весь рынок и история цен в пару тапов 👇",
+        reply_markup=kb,
+    )
     remember_ephemeral(m.chat.id, m.message_id, sent.message_id)
 
 
@@ -495,10 +475,9 @@ async def cb_alcust(c: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "howto")
 async def cb_howto(c: CallbackQuery):
     await c.answer(
-        "🔍 Просто напиши название предмета — можно по-русски:\n\n"
-        "«вектор», «дигл», «шлем», «gold»\n\n"
-        "Получишь цену, график за 7 дней и сможешь поставить слежку. "
-        "А в приложении — весь рынок, выгода и новости.",
+        "🔍 Открой приложение → вкладка «Рынок».\n\n"
+        "Найди предмет по названию (можно по-русски), смотри цену и график "
+        "за 7 дней, ставь слежку — придёт уведомление, когда подешевеет.",
         show_alert=True,
     )
 

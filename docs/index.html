@@ -1303,8 +1303,24 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
 
 /* ---------- старт ---------- */
 let catError = false;
+
+// deep-link из бота: #market открывает Рынок, #fav — Избранное
+function tabFromHash() {
+  const h = (location.hash || '').replace('#', '');
+  if (h === 'market') return 'market';
+  if (h === 'fav') return 'stash';
+  return 'home';
+}
+function markActiveTab() {
+  document.querySelectorAll('.tab').forEach(x =>
+    x.classList.toggle('on', x.dataset.tab === tab));
+}
+
 (async function init() {
-  renderHome();
+  tab = tabFromHash();
+  markActiveTab();
+  if (tab === 'stash') renderStash();
+  else if (tab !== 'market') renderHome();
   loadRuNames();
   // синхронизация с сервером + «онлайн» каждую минуту, пока приложение открыто
   setTimeout(async () => {
