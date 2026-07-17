@@ -496,6 +496,40 @@ function miniSvg(values, color) {
   return '<svg viewBox="0 0 56 20" class="rspark"><polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="1.5"/></svg>';
 }
 
+/* ---------- API сервера (алерты без перехода в чат) ---------- */
+let API_OK = null;   // null — не проверяли, true/false — знаем
+function initData() { try { return (tg && tg.initData) || ''; } catch(e) { return ''; } }
+
+async function srv(path, body) {
+  const init = initData();
+  if (!init) throw new Error('no-initdata');
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 10000);
+  try {
+    const r = await fetch('/api' + path, {
+      method: body ? 'POST' : 'GET',
+      headers: {'Content-Type': 'application/json', 'X-Init-Data': init},
+      body: body ? JSON.stringify(body) : undefined,
+      signal: ctl.signal
+    });
+    clearTimeout(t);
+    if (!r.ok) throw new Error('api ' + r.status);
+    API_OK = true;
+    return r.json();
+  } catch(e) { clearTimeout(t); API_OK = false; throw e; }
+}
+
+/** Синхронизация с сервером: он — источник правды по слежке и избранному. */
+async function syncFromServer() {
+  try {
+    const d = await srv('/me');
+    localStorage.setItem('myalerts', JSON.stringify(d.alerts || {}));
+    wlSet(d.favorites || []);
+    if (d.profile && d.profile.id) profSet({id: d.profile.id, name: d.profile.name});
+    return true;
+  } catch(e) { return false; }
+}
+
 /* ---------- моя слежка (локально, максимум одна на предмет) ---------- */
 function alGetAll() {
   try {
@@ -746,17 +780,20 @@ async function openItem(id) {
     if (w.includes(id)) w = w.filter(x => x !== id); else w.push(id);
     wlSet(w);
     const b = $('#wlbtn');
-    b.textContent = w.includes(id) ? '✓ В избранном' : '⭐ В избранное';
-    b.classList.toggle('fill', w.includes(id));
+    const on = w.includes(id);
+    b.textContent = on ? '✓ В избранном' : '⭐ В избранное';
+    b.classList.toggle('fill', on);
     if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch(e){} }
+    try { await srv('/fav', {item_id: id, on: on}); } catch(e){}   // синхронизация с сервером
   };
   if (myAl) {
-    $('#alrm').onclick = () => {
+    $('#alrm').onclick = async () => {
       alRemove(id);
       const btn = document.getElementById('alrm');
       if (btn) btn.closest('.btns').outerHTML =
         '<div class="signal" style="background:var(--divider);margin-top:8px"><i style="background:var(--text2)"></i><b style="color:var(--text2)">🔕 Слежка отменена</b></div>';
-      setTimeout(() => openBotLink('rm_' + id), 450);
+      try { await srv('/alert/remove', {item_id: id}); }
+      catch(e) { setTimeout(() => openBotLink('rm_' + id), 450); }
     };
   } else {
     $('#aldown').onclick = () => showAlertPicker(id, 'd', price);
@@ -793,20 +830,35 @@ function showAlertPicker(id, dir, price) {
 async function pickAlert(id, dir, thr) {
   const box = document.getElementById('alpick');
   const word = dir === 'd' ? 'подешевеет до' : 'подорожает до';
-  const confirmHtml = ok => '<div class="signal" style="background:var(--green-bg);margin-top:12px">' +
-    '<i style="background:var(--green)"></i><b style="color:var(--green)">' +
-    (ok ? '✅ Принято! Сообщу, когда ' : '🔁 Уже слежу — сообщу, когда ') + word + ' ' + fmt(thr) + ' ₮</b></div>';
-  // одна слежка на предмет: если уже есть — не создаём вторую
-  if (alGet(id)) {
-    if (box) box.innerHTML = confirmHtml(false);
-    return;
+  const say = (html, cls) => { if (box) box.innerHTML =
+    '<div class="signal" style="background:var(--' + (cls || 'green') + '-bg);margin-top:12px">' +
+    '<i style="background:var(--' + (cls || 'green') + ')"></i>' +
+    '<b style="color:var(--' + (cls || 'green') + ')">' + html + '</b></div>'; };
+
+  if (alGet(id)) { say('🔁 Уже слежу — сообщу, когда ' + word + ' ' + fmt(thr) + ' ₮'); return; }
+
+  say('⏳ Ставлю слежку…', 'amber');
+  try {
+    // основной путь: сервер ставит слежку сам — из чата выходить не нужно
+    const r = await srv('/alert', {item_id: id, dir: dir, threshold: thr});
+    if (r.ok === false && r.reason === 'already') {
+      alSet(id, r.existing.d, r.existing.t);
+      say('🔁 Уже слежу за этим предметом');
+      return;
+    }
+    let w = await wlGet();
+    if (!w.includes(id)) { w.push(id); wlSet(w); }
+    alSet(id, dir, thr);
+    say('✅ Принято! Сообщу в бот, когда ' + word + ' ' + fmt(thr) + ' ₮');
+    if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
+  } catch(e) {
+    // запасной путь (нет сети/старый хостинг): через чат с ботом
+    let w = await wlGet();
+    if (!w.includes(id)) { w.push(id); wlSet(w); }
+    alSet(id, dir, thr);
+    say('✅ Принято! Подтверди в чате с ботом');
+    setTimeout(() => openBotLink('al_' + dir + '_' + id + '_' + thr), 450);
   }
-  let w = await wlGet();
-  if (!w.includes(id)) { w.push(id); wlSet(w); }   // слежу за ценой = в избранном
-  alSet(id, dir, thr);
-  if (box) box.innerHTML = confirmHtml(true);      // кнопки исчезают -> дубль не накликать
-  if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
-  setTimeout(() => openBotLink('al_' + dir + '_' + id + '_' + thr), 450);
 }
 
 function openBotLink(payload) {
@@ -982,6 +1034,18 @@ async function loadProfileData(prof) {
   const box = document.getElementById('stashbox');
   if (!box) return;
   let html = '';
+  // сначала пробуем НАШУ историю (её копит сервер — она надёжнее чужого API)
+  try {
+    const mine = await srv('/stash');
+    if (mine && mine.last) {
+      html = '<div class="label">Стоимость стэша · live</div>' +
+        '<div class="bigprice num" style="font-size:24px;margin-top:6px">' + fmt(mine.last) + ' <span style="color:var(--orange)">₮</span></div>' +
+        (mine.values.length > 1 ? chartSvg(mine.values, 320, 56) + '<div class="chart-meta"><span>ДИНАМИКА · НАШИ ДАННЫЕ</span><span>30 ДНЕЙ</span></div>' : '');
+      const box2 = document.getElementById('stashbox');
+      if (box2) box2.innerHTML = html;
+      return;
+    }
+  } catch(e){}
   try {
     const sv = await api('GetPlayerOperationStashValue', {playerId: prof.id});
     let raw = sv.stashValue !== undefined ? sv.stashValue : sv.value;
@@ -1002,7 +1066,7 @@ async function loadProfileData(prof) {
       '<div class="bigprice num" style="font-size:24px;margin-top:6px">' + fmt(val) + ' <span style="color:var(--orange)">₮</span></div>' +
       (hist.length > 1 ? chartSvg(hist, 320, 56) + '<div class="chart-meta"><span>ДИНАМИКА</span><span>30 ДНЕЙ</span></div>' : '');
   } catch(e) {
-    html = '<div class="hint" style="text-align:left;padding:4px 0 0">📡 Сервис статистики ещё собирает данные по этому аккаунту — так бывает с теми, кого ищут впервые. Загляни через день-два, стэш появится.</div>';
+    html = '<div class="hint" style="text-align:left;padding:4px 0 0">📡 Сервер взял твой аккаунт на трекинг и опрашивает его каждый час. Данные о стэше появятся здесь автоматически — обычно в течение суток.</div>';
   }
   try {
     const st = await api('GetPlayerOperationStats', {playerId: prof.id});
@@ -1085,7 +1149,11 @@ function renderMore() {
 
   $('#probtn').onclick = openBot;
   if (prof) {
-    $('#dfunlink').onclick = () => { profClear(); renderMore(); };
+    $('#dfunlink').onclick = async () => {
+      profClear();
+      try { await srv('/profile', {player_id: null}); } catch(e){}
+      renderMore();
+    };
     loadProfileData(prof);
   } else {
     $('#dflink').onclick = async () => {
@@ -1098,6 +1166,8 @@ function renderMore() {
         const d = await api('GetPlayer', payload);
         if (!d.player) throw new Error('not found');
         profSet({id: d.player.id, name: d.player.name, dfid: d.player.deltaForceId, lvl: d.player.levelOperations});
+        // сообщаем серверу — он начнёт прогревать этот профиль каждый час
+        try { await srv('/profile', {player_id: d.player.id, player_name: d.player.name}); } catch(e){}
         if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
         renderMore();
       } catch(e) {
@@ -1125,6 +1195,7 @@ async function handleRemoveFav(id) {
   if (alGet(id)) { openItem(id); return; } // активная слежка отменяется в карточке
   let w = await wlGet();
   wlSet(w.filter(x => x !== id));
+  try { await srv('/fav', {item_id: id, on: false}); } catch(e){}
   renderStash();
 }
 
@@ -1145,6 +1216,14 @@ let catError = false;
 (async function init() {
   renderHome();
   loadRuNames();
+  // синхронизация с сервером + «онлайн» каждую минуту, пока приложение открыто
+  setTimeout(async () => {
+    if (await syncFromServer()) {
+      if (tab === 'stash') renderStash();
+      else if (tab === 'more') renderMore();
+    }
+    setInterval(() => { srv('/ping', {}).catch(()=>{}); }, 60000);
+  }, 1200);
   try { await loadCatalog(); } catch(e) { catError = true; }
   if (tab === 'market') renderMarket();
 })();

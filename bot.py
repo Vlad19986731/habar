@@ -25,8 +25,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import api
 import db
 from aliases import normalize_query
-from config import (ADMIN_IDS, API_POLITE_DELAY, BOT_TOKEN, COLLECT_EVERY_MIN,
-                    NEWS_GIT_PUSH, WEB_DIR)
+from config import (ADMIN_IDS, API_ENABLED, API_POLITE_DELAY, BOT_TOKEN,
+                    COLLECT_EVERY_MIN, NEWS_GIT_PUSH, WARM_EVERY_MIN, WEB_DIR)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("dfbot")
@@ -679,6 +679,30 @@ async def refresh_news():
         log.exception("Не удалось обновить новости")
 
 
+async def warm_profiles():
+    """Каждый час: опрашиваем привязанных игроков.
+
+    Это (1) заставляет внешний сервис начать/продолжить трекинг игрока —
+    стэши появляются быстрее, и (2) копит НАШУ историю стэшей,
+    независимую от чужого API.
+    """
+    players = await db.tracked_players()
+    if not players:
+        return
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
+    ok = 0
+    for pid in players:
+        try:
+            val = await api.get_stash_value(pid)
+            if val is not None:
+                await db.stash_add(pid, now, val)
+                ok += 1
+        except Exception:
+            log.exception("Прогрев профиля %s не удался", pid)
+        await asyncio.sleep(API_POLITE_DELAY)
+    log.info("Прогрев профилей: %s из %s с данными", ok, len(players))
+
+
 async def collect_and_check(bot: Bot):
     """Каждые N минут: снапшот цен отслеживаемых предметов + проверка алертов."""
     ids = await db.tracked_item_ids()
@@ -743,8 +767,14 @@ async def main():
     scheduler.add_job(refresh_news, "interval", hours=6)
     scheduler.add_job(refresh_ru_names, "interval", hours=24)
     scheduler.add_job(collect_and_check, "interval", minutes=COLLECT_EVERY_MIN, args=[bot])
+    scheduler.add_job(warm_profiles, "interval", minutes=WARM_EVERY_MIN)
     scheduler.start()
     asyncio.get_running_loop().create_task(refresh_ru_names())
+
+    if API_ENABLED:
+        from web_api import start_api
+        await start_api()
+        asyncio.get_running_loop().create_task(warm_profiles())
 
     log.info("Бот запущен")
     await dp.start_polling(bot)

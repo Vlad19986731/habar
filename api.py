@@ -50,6 +50,18 @@ async def get_series(item_id: str, days: int = 7) -> list[dict]:
         return []
 
 
+async def get_stash_value(player_id: str) -> float | None:
+    """Текущая стоимость стэша игрока (None, если сервис ещё не собрал данные)."""
+    try:
+        data = await _call("GetPlayerOperationStashValue", {"playerId": player_id})
+    except httpx.HTTPStatusError:
+        return None
+    raw = data.get("stashValue", data.get("value"))
+    if isinstance(raw, dict):
+        raw = raw.get("value", raw.get("stashValue"))
+    return float(raw) if isinstance(raw, (int, float)) else None
+
+
 async def get_current_season() -> dict | None:
     try:
         data = await _call("GetSeasonCurrent", {})

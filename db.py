@@ -41,6 +41,13 @@ CREATE TABLE IF NOT EXISTS price_history (
     price   REAL NOT NULL,
     PRIMARY KEY (item_id, ts)
 );
+-- своя история стоимости стэшей (прогрев профилей)
+CREATE TABLE IF NOT EXISTS stash_history (
+    player_id TEXT NOT NULL,
+    ts        TEXT NOT NULL,
+    value     REAL NOT NULL,
+    PRIMARY KEY (player_id, ts)
+);
 """
 
 
@@ -244,6 +251,21 @@ async def alert_add(tg_id: int, item_id: str, direction: str, threshold: float) 
         await db.commit()
 
 
+async def alerts_full(tg_id: int) -> list[tuple]:
+    """(alert_id, item_id, direction, threshold) — для API."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT id, item_id, direction, threshold FROM alerts WHERE tg_id=? AND active=1",
+            (tg_id,))
+        return await cur.fetchall()
+
+
+async def get_df_player(tg_id: int) -> tuple | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT df_player_id, df_player_name FROM users WHERE tg_id=?", (tg_id,))
+        return await cur.fetchone()
+
+
 async def alerts_for_user(tg_id: int) -> list[tuple]:
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
@@ -286,6 +308,30 @@ async def tracked_item_ids() -> list[str]:
             "UNION SELECT DISTINCT item_id FROM alerts WHERE active=1"
         )
         return [r[0] for r in await cur.fetchall()]
+
+
+async def tracked_players() -> list[str]:
+    """Игроки, привязанные пользователями — их профили прогреваем."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT DISTINCT df_player_id FROM users WHERE df_player_id IS NOT NULL")
+        return [r[0] for r in await cur.fetchall()]
+
+
+async def stash_add(player_id: str, ts: str, value: float) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR IGNORE INTO stash_history(player_id, ts, value) VALUES(?,?,?)",
+                         (player_id, ts, value))
+        await db.commit()
+
+
+async def stash_series(player_id: str, days: int = 30) -> list[tuple]:
+    """Наша собственная история стэша: [(ts, value), ...]"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT ts, value FROM stash_history WHERE player_id=? "
+            "AND ts > datetime('now', ?) ORDER BY ts", (player_id, f"-{days} days"))
+        return await cur.fetchall()
 
 
 async def history_add(item_id: str, ts: str, price: float) -> None:

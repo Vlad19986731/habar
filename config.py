@@ -14,6 +14,11 @@ API_BASE = "https://api.deltaforceapi.com/deltaforceapi.gateway.v1.ApiService"
 ADMIN_IDS = {int(x) for x in os.getenv("ADMIN_IDS", "1034454256").split(",") if x.strip()}
 # на сервере пушить в git не надо — nginx раздаёт файлы напрямую
 NEWS_GIT_PUSH = os.getenv("NEWS_GIT_PUSH", "1") == "1"
+# HTTP API для Mini App (nginx проксирует /api сюда)
+API_PORT = int(os.getenv("API_PORT", "8081"))
+API_ENABLED = os.getenv("API_ENABLED", "0") == "1"
+# как часто прогревать профили привязанных игроков (минуты)
+WARM_EVERY_MIN = int(os.getenv("WARM_EVERY_MIN", "60"))
 
 # как часто собирать цены отслеживаемых предметов (минуты)
 COLLECT_EVERY_MIN = 15
