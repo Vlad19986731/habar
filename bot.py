@@ -852,7 +852,7 @@ async def compute_flips():
         for item_id, _ts, price in rows:
             by_item.setdefault(item_id, []).append(price)
 
-        dips, movers, volatile = [], [], []
+        dips, movers, volatile, forecast = [], [], [], []
         for item_id, pts in by_item.items():
             if len(pts) < FLIP_MIN_POINTS:
                 continue
@@ -892,13 +892,24 @@ async def compute_flips():
                 volatile.append({"id": item_id, "price": int(cur), "lo": int(lo),
                                  "hi": int(hi), "pct": round(rng, 1), "spark": _spark(last24)})
 
+            # прогноз (возврат к медиане, точность ~60%): вверх если дёшево, вниз если дорого
+            devMed = (cur - typical) / typical * 100
+            if -50 <= devMed <= -8:
+                forecast.append({"id": item_id, "price": int(cur), "target": int(typical),
+                                 "dir": "up", "pct": round(abs(devMed), 1), "spark": _spark(pts)})
+            elif 8 <= devMed <= 50:
+                forecast.append({"id": item_id, "price": int(cur), "target": int(typical),
+                                 "dir": "down", "pct": round(devMed, 1), "spark": _spark(pts)})
+
         dips.sort(key=lambda x: -x["pct"])
         movers.sort(key=lambda x: -x["pct"])
         volatile.sort(key=lambda x: -x["pct"])
+        forecast.sort(key=lambda x: -x["pct"])
         payload = {
             "updated": datetime.now(timezone.utc).isoformat(),
             "scanned": len(by_item),
             "dips": dips[:15], "movers": movers[:15], "volatile": volatile[:15],
+            "forecast": forecast[:20],
         }
         tmp = FLIPS_PATH.with_suffix(".tmp")
         tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")

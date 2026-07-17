@@ -828,38 +828,6 @@ async function openItem(id) {
   if (dev <= -5) { sigBg='var(--green-bg)'; sigC='var(--green)'; sigDot='var(--green)'; sigTxt='Ниже средней 7д на ' + Math.abs(dev).toFixed(0) + '% — точка входа'; }
   else if (dev >= 5) { sigBg='var(--red-bg)'; sigC='var(--red)'; sigDot='var(--red)'; sigTxt='Выше средней 7д на ' + dev.toFixed(0) + '% — дорого'; }
 
-  // прогноз на методе «возврат к средней» (реальная точность направления ~60%, проверено бэктестом)
-  let forecastBlock = '', fcastDir = null, fcastThr = 0;
-  if (avgs.length >= 25) {
-    const sorted = avgs.slice().sort((a,b)=>a-b);
-    const median = sorted[Math.floor(sorted.length/2)] || price;
-    const devMed = median ? (price - median)/median*100 : 0;
-    let fC, fIcon, fDir, fWhy;
-    if (devMed <= -8) {
-      fC='var(--green)'; fIcon='📈'; fDir='Вероятно вверх';
-      fWhy='Цена ниже обычной — момент закупиться. Купи в игре, а я сообщу, когда подорожает до ориентира — пора продавать.';
-      fcastDir='u'; fcastThr=Math.round(median);
-    } else if (devMed >= 8) {
-      fC='var(--red)'; fIcon='📉'; fDir='Вероятно вниз';
-      fWhy='Цена выше обычной. Если ждёшь скидку — сообщу, когда откатит до ориентира, чтобы взять дешевле.';
-      fcastDir='d'; fcastThr=Math.round(median);
-    } else {
-      fC='var(--text2)'; fIcon='➡️'; fDir='Скорее стабильно';
-      fWhy='Цена близка к обычной — явного движения не ждём.';
-    }
-    const target = fcastDir ? ' · ориентир ~' + fmt(median) + ' ₮' : '';
-    forecastBlock =
-      '<div class="label" style="margin-top:14px">🔮 Прогноз</div>' +
-      '<div class="signal" style="background:var(--surface);margin-top:8px"><i style="background:' + fC + '"></i>' +
-        '<b style="color:' + fC + '">' + fIcon + ' ' + fDir + target + '</b></div>' +
-      '<div class="hint" style="text-align:left;padding:7px 2px 0">' + fWhy +
-        ' Метод угадывает направление в ~60% случаев (проверено на истории). Не гарантия — рынок может уйти.</div>' +
-      (fcastDir && !myAl
-        ? '<div class="btns" style="margin-top:8px"><button class="btn" id="fcastbtn">' +
-            (fcastDir === 'u' ? '🔔 Слежу на продажу ~' + fmt(fcastThr) : '🔔 Слежу на покупку ~' + fmt(fcastThr)) +
-          '</button></div>'
-        : '');
-  }
 
   const wl = await wlGet();
   const inWl = wl.includes(id);
@@ -889,7 +857,6 @@ async function openItem(id) {
     chartSvg(avgs) +
     '<div class="chart-meta"><span>' + (p.referencePrice ? 'РЕФ. ЦЕНА ' + fmt(p.referencePrice) : '') + '</span><span>7 ДНЕЙ</span></div>' +
     '<div class="signal" style="background:' + sigBg + '"><i style="background:' + sigDot + '"></i><b style="color:' + sigC + '">' + sigTxt + '</b></div>' +
-    forecastBlock +
     '<div class="btns">' +
       '<button class="btn ' + (inWl?'fill':'') + '" id="wlbtn">' + (inWl ? '✓ В избранном' : '⭐ В избранное') + '</button>' +
     '</div>' +
@@ -930,28 +897,6 @@ async function openItem(id) {
     $('#alup').onclick = () => showAlertPicker(id, 'u', price);
   }
 
-  // кнопка прогноза: поставить слежку сразу на целевую цену (ориентир)
-  const fb = $('#fcastbtn');
-  if (fb && fcastDir) fb.onclick = async () => {
-    fb.textContent = '⏳ Ставлю…';
-    const word = fcastDir === 'u' ? 'пора продавать' : 'пора покупать';
-    try {
-      const r = await srv('/alert', {item_id: id, dir: fcastDir, threshold: fcastThr});
-      if (r.ok === false && r.reason === 'already') { alSet(id, r.existing.d, r.existing.t); }
-      else {
-        let w = await wlGet(); if (!w.includes(id)) { w.push(id); wlSet(w); }
-        alSet(id, fcastDir, fcastThr);
-      }
-      fb.textContent = '✅ Сообщу при ~' + fmt(fcastThr) + ' ₮ — ' + word;
-      fb.classList.add('fill');
-      if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
-    } catch(e) {
-      let w = await wlGet(); if (!w.includes(id)) { w.push(id); wlSet(w); }
-      alSet(id, fcastDir, fcastThr);
-      fb.textContent = '✅ Принято — подтверди в боте';
-      setTimeout(() => openBotLink('al_' + fcastDir + '_' + id + '_' + fcastThr), 450);
-    }
-  };
 }
 
 function showAlertPicker(id, dir, price) {
@@ -1057,6 +1002,38 @@ function flipSpark(pts, color) {
     '<polyline points="' + pts.map((v, i) => x(i) + ',' + y(v)).join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.5"/></svg>';
 }
 
+function forecastCard(f) {
+  const it = CATALOG.find(i => i.id === f.id);
+  if (!it) return '';
+  const up = f.dir === 'up';
+  const col = up ? 'var(--green)' : 'var(--red)';
+  const dirTxt = up ? '📈 Вероятно вверх' : '📉 Вероятно вниз';
+  const advice = up ? 'дёшево сейчас — закупись, продай у ориентира'
+                    : 'дорого сейчас — подожди отката до ориентира';
+  const btnTxt = up ? '🔔 Слежу на продажу ~' + fmt(f.target)
+                    : '🔔 Слежу на покупку ~' + fmt(f.target);
+  return '<div class="fcard">' +
+    '<button class="fcard-open" data-id="' + f.id + '" style="all:unset;display:block;width:100%;cursor:pointer">' +
+      '<div style="display:flex;align-items:center;gap:9px">' +
+        '<span class="well" style="width:34px;height:34px"><span class="ab">' + abbr(it.name) + '</span>' +
+          '<img loading="lazy" decoding="async" src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
+        '<b style="flex:1;min-width:0;color:var(--white);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left">' + displayName(it) + '</b>' +
+        flipSpark(f.spark, col) +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:9px;font-size:11.5px;color:var(--text2)">' +
+        '<span class="num">сейчас <b style="color:var(--white)">' + fmt(f.price) + '</b></span>' +
+        '<span style="color:var(--text3)">→</span>' +
+        '<span class="num">ориентир <b style="color:' + col + '">' + fmt(f.target) + '</b></span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:baseline;gap:8px;margin-top:7px;border-top:1px solid var(--divider);padding-top:8px">' +
+        '<span class="num" style="color:' + col + ';font-size:15px;font-weight:800">' + dirTxt + '</span>' +
+        '<span style="color:var(--text3);font-size:10px;margin-left:auto">' + advice + '</span>' +
+      '</div>' +
+    '</button>' +
+    '<button class="btn" style="margin-top:9px" data-fcast="' + f.dir + '" data-id="' + f.id + '" data-thr="' + f.target + '">' + btnTxt + '</button>' +
+    '</div>';
+}
+
 function flipCard(f, kind) {
   const it = CATALOG.find(i => i.id === f.id);
   if (!it) return '';
@@ -1106,7 +1083,10 @@ function drawFlips() {
     el.innerHTML = '<div class="hint" style="padding:22px 14px">Сейчас в этой категории пусто — рынок спокоен.<br>Сканер проверяет все ' + (FLIPS.scanned || '—') + ' предметов каждый час.</div>';
     return;
   }
-  el.innerHTML = list.map(f => flipCard(f, flipTab)).join('');
+  el.innerHTML = flipTab === 'forecast'
+    ? list.map(forecastCard).join('') +
+      '<div class="hint" style="padding:10px 4px 0;font-size:10px">Метод «возврат к средней» угадывает направление в ~60% случаев (проверено на истории). Не гарантия.</div>'
+    : list.map(f => flipCard(f, flipTab)).join('');
 }
 
 async function renderFlips() {
@@ -1118,6 +1098,7 @@ async function renderFlips() {
       '<span class="chip' + (flipTab === 'dips' ? ' on' : '') + '" data-ftab="dips">📉 Просадки</span>' +
       '<span class="chip' + (flipTab === 'movers' ? ' on' : '') + '" data-ftab="movers">🚀 Растут</span>' +
       '<span class="chip' + (flipTab === 'volatile' ? ' on' : '') + '" data-ftab="volatile">⚡ Качели</span>' +
+      '<span class="chip' + (flipTab === 'forecast' ? ' on' : '') + '" data-ftab="forecast">🔮 Прогноз</span>' +
     '</div>' +
     '<div id="flipbody" style="display:flex;flex-direction:column;gap:8px;margin-top:10px"><div class="spin"></div></div>' +
     '<div class="hint" style="padding:12px 4px 0;font-size:10.5px">Не гарантия прибыли: рынок может уйти. Тапни предмет — там график и слежка за ценой.</div>';
@@ -1430,12 +1411,38 @@ view.addEventListener('click', e => {
   if (cc) { catFilter = cc.dataset.cat || null; renderMarket(); return; }
   const ft = e.target.closest('[data-ftab]');
   if (ft) { flipTab = ft.dataset.ftab; renderFlips(); return; }
+  const fc = e.target.closest('[data-fcast]');
+  if (fc) { setForecastAlert(fc); return; }
+  const fo = e.target.closest('.fcard-open');
+  if (fo && fo.dataset.id) { openItem(fo.dataset.id); return; }
   const row = e.target.closest('.row,.ncard,.fcard');
   if (!row) return;
   if (row.dataset.nidx !== undefined) { renderArticle(+row.dataset.nidx); return; }
   if (row.dataset.url) { openExternal(row.dataset.url); return; }
   if (row.dataset.id) openItem(row.dataset.id);
 });
+
+async function setForecastAlert(btn) {
+  const id = btn.dataset.id, thr = +btn.dataset.thr;
+  const dir = btn.dataset.fcast === 'up' ? 'u' : 'd';   // вверх→ждём подорожания (продать); вниз→подешевения (купить)
+  const word = dir === 'u' ? 'пора продавать' : 'пора покупать';
+  btn.textContent = '⏳ Ставлю…'; btn.disabled = true;
+  try {
+    const r = await srv('/alert', {item_id: id, dir, threshold: thr});
+    if (!(r.ok === false && r.reason === 'already')) {
+      let w = await wlGet(); if (!w.includes(id)) { w.push(id); wlSet(w); }
+    }
+    alSet(id, dir, thr);
+    btn.textContent = '✅ Сообщу при ~' + fmt(thr) + ' — ' + word;
+    btn.classList.add('fill');
+    if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
+  } catch(e) {
+    let w = await wlGet(); if (!w.includes(id)) { w.push(id); wlSet(w); }
+    alSet(id, dir, thr);
+    btn.textContent = '✅ Принято — подтверди в боте';
+    setTimeout(() => openBotLink('al_' + dir + '_' + id + '_' + thr), 450);
+  }
+}
 
 async function handleRemoveFav(id) {
   if (alGet(id)) { openItem(id); return; } // активная слежка отменяется в карточке
