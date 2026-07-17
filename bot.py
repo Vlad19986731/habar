@@ -694,8 +694,17 @@ async def refresh_news():
 
 # ---------- сканер рынка и флипы ----------
 FLIPS_PATH = WEB_DIR / "flips.json"
-FLIP_MIN_PRICE = 3000      # дешевле — пыль, комиссия съест всё
-FLIP_MIN_POINTS = 24       # минимум сутки истории на предмет
+FLIP_MIN_PRICE = 3000       # дешевле — пыль, комиссия съест всё
+FLIP_MIN_POINTS = 48        # минимум ~2 суток истории — чтобы медиана была надёжной
+FLIP_DIP_MIN = 8            # просадка ниже 8% не покрывает комиссию
+FLIP_DIP_MAX = 35           # выше 35% — почти всегда обвал/выброс, а не выгода
+FLIP_MOVE_MAX = 60          # рост >60%/сутки — тоже аномалия данных
+
+
+def _median(vals: list[float]) -> float:
+    s = sorted(vals)
+    n = len(s)
+    return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
 
 
 async def backfill_history():
@@ -765,28 +774,36 @@ async def compute_flips():
             cur = pts[-1]
             if cur < FLIP_MIN_PRICE:
                 continue
-            avg = sum(pts) / len(pts)
-            # просадка: купить сейчас, продать по средней (минус комиссия 15%)
-            margin = avg * 0.85 - cur
+
+            # МЕДИАНА, а не среднее: одна аномальная сделка не ломает «типичную цену»
+            typical = _median(pts)
+            if typical <= 0:
+                continue
+
+            # просадка: купить сейчас, продать по типичной цене (минус комиссия 15%)
+            margin = typical * 0.85 - cur
             pct = margin / cur * 100
-            if pct >= 8:
-                dips.append({"id": item_id, "price": int(cur), "avg": int(avg),
+            # фильтр реалистичности: 8..35% — реальный отскок; выше — обвал/выброс
+            if FLIP_DIP_MIN <= pct <= FLIP_DIP_MAX:
+                dips.append({"id": item_id, "price": int(cur), "avg": int(typical),
                              "margin": int(margin), "pct": round(pct, 1),
                              "spark": _spark(pts)})
-            # рост за сутки
+
+            # рост за сутки (тоже с потолком — резкий скачок часто выброс)
             if len(pts) >= 25:
                 prev = pts[-25]
                 mp = (cur - prev) / prev * 100 if prev else 0
-                if mp >= 10:
+                if 10 <= mp <= FLIP_MOVE_MAX:
                     movers.append({"id": item_id, "price": int(cur), "prev": int(prev),
                                    "pct": round(mp, 1), "spark": _spark(pts)})
-            # внутридневные качели
+
+            # внутридневные качели — на медиане окна, устойчиво к выбросам
             last24 = pts[-24:]
             lo, hi = min(last24), max(last24)
-            mid = sum(last24) / len(last24)
+            mid = _median(last24)
             rng = (hi - lo) / mid * 100 if mid else 0
-            # качели интересны, только если размах перекрывает комиссию
-            if rng >= 18:
+            # 18..80%: перекрывает комиссию, но не абсурд
+            if 18 <= rng <= 80:
                 volatile.append({"id": item_id, "price": int(cur), "lo": int(lo),
                                  "hi": int(hi), "pct": round(rng, 1), "spark": _spark(last24)})
 
