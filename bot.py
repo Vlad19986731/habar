@@ -190,6 +190,12 @@ async def cmd_start(m: Message, command: CommandObject):
         else:
             await m.answer(f"За <b>{name}</b> активной слежки не было — всё чисто.")
         return
+    # реферальная ссылка: ?start=ref_<id>
+    if args.startswith("ref_") and args[4:].isdigit():
+        ref_by = int(args[4:])
+        if await db.set_referrer(m.from_user.id, ref_by):
+            await m.answer("🎁 Ты пришёл по приглашению! Осмотрись — а когда освоишься, "
+                           "твой друг получит бонус к PRO.")
     if args.startswith("al_"):
         parts = args.split("_")
         if len(parts) >= 3 and parts[1] in ("d", "u"):
@@ -963,6 +969,25 @@ async def bootstrap_market():
         log.exception("Бутстрап рынка не удался")
 
 
+async def credit_referrals(bot: Bot):
+    """Каждые 30 мин: засчитываем активных приглашённых, дарим рефереру дни PRO."""
+    for friend_id, referrer_id in await db.pending_referrals():
+        try:
+            new_until = await db.add_pro_days(referrer_id, REF_BONUS_DAYS)
+            await db.mark_referral_credited(friend_id, referrer_id)
+            until = datetime.fromisoformat(new_until).strftime("%d.%m.%Y")
+            await bot.send_message(
+                referrer_id,
+                f"🎉 Твой друг активно пользуется Хабаром!\n"
+                f"Тебе начислено <b>+{REF_BONUS_DAYS} дней PRO</b> 🔥\n"
+                f"<i>PRO активен до {until}. Зови ещё друзей — продлевай бесплатно.</i>")
+        except Exception as e:
+            if "bot was blocked" in str(e).lower():
+                await db.mark_referral_credited(friend_id, referrer_id)
+            else:
+                log.exception("Не смог засчитать реферала %s -> %s", friend_id, referrer_id)
+
+
 async def warm_profiles():
     """Каждый час: опрашиваем привязанных игроков.
 
@@ -1061,6 +1086,7 @@ async def main():
     scheduler.add_job(refresh_ru_names, "interval", hours=24)
     scheduler.add_job(collect_and_check, "interval", minutes=COLLECT_EVERY_MIN, args=[bot])
     scheduler.add_job(warm_profiles, "interval", minutes=WARM_EVERY_MIN)
+    scheduler.add_job(credit_referrals, "interval", minutes=30, args=[bot])
     scheduler.add_job(market_snapshot, "interval", hours=1)
     scheduler.add_job(db.history_cleanup, "interval", hours=24)
     scheduler.start()

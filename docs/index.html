@@ -1403,16 +1403,17 @@ function renderMore() {
       '<div class="hint" id="dferr" style="text-align:left;padding:6px 0 0;color:var(--red)"></div></div>';
 
   view.innerHTML = head + profileCard +
-    '<div class="prem cut"><h4>[ ХАБАР PRO ]</h4>' +
-    '<p>Безлимитные алерты по цене<br>Флип-финдер в реальном времени<br>История цен за 90 дней</p>' +
-    '<div class="btn fill" style="display:block;margin-top:14px" id="probtn">Скоро · следи в боте</div></div>' +
+    '<div id="probox"><div class="prem cut"><h4>[ ХАБАР PRO ]</h4>' +
+      '<p>Безлимит слежек · вся «Выгода» · прогноз с целью · история 30 дней · стэш и статистика</p>' +
+      '<div class="spin" style="margin:12px auto 2px"></div></div></div>' +
     '<div class="label sect" style="margin-top:16px">В разработке</div>' +
     '<div class="list">' +
     '<div class="row" style="cursor:default"><span class="rmain"><b>Крафт-калькулятор</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
     '</div>' +
     '<div class="hint">🔔 Цены и алерты в чате: <b>@habar_price_bot</b><br><span style="font-size:11px">Не аффилирован с TiMi Studios / Tencent · данные deltaforceapi.com</span></div>';
 
-  $('#probtn').onclick = openBot;
+  loadProBox();
+
   if (prof) {
     $('#dfunlink').onclick = async () => {
       profClear();
@@ -1441,6 +1442,77 @@ function renderMore() {
       }
     };
   }
+}
+
+const PRO_FEATURES = [
+  '🔔 Безлимит слежек за ценой',
+  '💰 Вся «Выгода» — все связки, не топ-3',
+  '🔮 Прогноз с целью + слежка в один тап',
+  '📊 История цен за 30 дней',
+  '🎒 Стоимость стэша и статистика',
+  '🚫 Без рекламы',
+];
+
+async function loadProBox() {
+  const box = document.getElementById('probox');
+  if (!box) return;
+  let p;
+  try { p = await srv('/pro'); }
+  catch(e) {
+    box.innerHTML = proShell('<div class="hint" style="text-align:left;padding:6px 0 0">Открой через Telegram, чтобы увидеть PRO.</div>');
+    return;
+  }
+  const feats = '<div style="display:flex;flex-direction:column;gap:5px;margin-top:10px">' +
+    PRO_FEATURES.map(f => '<div style="color:var(--text2);font-size:12.5px">' + f + '</div>').join('') + '</div>';
+
+  let statusBlock, actionBlock = '';
+  if (p.pro) {
+    const until = p.pro_until ? new Date(p.pro_until).toLocaleDateString('ru') : '';
+    statusBlock = '<div class="signal" style="background:var(--green-bg);margin-top:12px"><i style="background:var(--green)"></i>' +
+      '<b style="color:var(--green)">✅ PRO активен' + (until ? ' до ' + until : '') + '</b></div>';
+  } else if (p.slots_left > 0) {
+    statusBlock = '<div class="signal" style="background:rgba(224,178,75,.1);border:1px solid rgba(224,178,75,.3);margin-top:12px">' +
+      '<i style="background:var(--amber)"></i><b style="color:var(--amber)">🎁 Ранний доступ: PRO на 30 дней бесплатно</b></div>' +
+      '<div class="chart-meta" style="margin-top:6px"><span>ОСТАЛОСЬ ' + p.slots_left + ' ИЗ 500 МЕСТ</span><span>УСПЕЙ</span></div>';
+    actionBlock = '<button class="btn fill" style="display:block;margin-top:12px" id="proclaim">🎁 Забрать PRO на 30 дней</button>';
+  } else {
+    statusBlock = '<div class="hint" style="text-align:left;padding:8px 0 0">Ранние места разобраны. PRO — <b>150 Stars/мес</b> <span style="color:var(--amber)">(скоро)</span>.</div>';
+  }
+
+  // реферальный блок — всегда
+  const refBlock =
+    '<div class="label" style="margin-top:16px">🤝 Зови друзей — продлевай PRO</div>' +
+    '<div class="hint" style="text-align:left;padding:6px 0 8px">За каждого друга, который придёт по твоей ссылке и начнёт пользоваться, тебе <b style="color:var(--mint)">+' + (p.ref_bonus_days || 7) + ' дней PRO</b>.' +
+      (p.ref_count ? ' Уже привёл: <b>' + p.ref_count + '</b>.' : '') + '</div>' +
+    '<div class="btns"><button class="btn" id="refshare">📤 Позвать друга</button></div>';
+
+  box.innerHTML = proShell(feats + statusBlock + actionBlock) + refBlock;
+
+  const claim = document.getElementById('proclaim');
+  if (claim) claim.onclick = async () => {
+    claim.textContent = '⏳ …'; claim.disabled = true;
+    try {
+      const r = await srv('/pro/claim', {});
+      if (r.ok) {
+        if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
+        loadProBox();
+      } else {
+        claim.textContent = r.reason === 'no_slots' ? 'Места кончились 😕' : 'Уже активно';
+      }
+    } catch(e) { claim.textContent = 'Не вышло — попробуй ещё'; claim.disabled = false; }
+  };
+  const share = document.getElementById('refshare');
+  if (share) share.onclick = () => {
+    const link = p.ref_link || (BOT_LINK);
+    const text = 'Хабар — цены аукциона Delta Force, слежка за ценой и выгода. Залетай 🎯';
+    const url = 'https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text);
+    if (tg && tg.openTelegramLink) { try { tg.openTelegramLink(url); return; } catch(e){} }
+    window.open(url, '_blank');
+  };
+}
+
+function proShell(inner) {
+  return '<div class="prem cut"><h4>[ ХАБАР PRO ]</h4>' + inner + '</div>';
 }
 
 /* ---------- события ---------- */

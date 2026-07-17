@@ -19,6 +19,11 @@ API_PORT = int(os.getenv("API_PORT", "8081"))
 API_ENABLED = os.getenv("API_ENABLED", "0") == "1"
 # как часто прогревать профили привязанных игроков (минуты)
 WARM_EVERY_MIN = int(os.getenv("WARM_EVERY_MIN", "60"))
+# PRO и рефералы
+EARLY_BIRD_LIMIT = int(os.getenv("EARLY_BIRD_LIMIT", "500"))   # первым N — PRO бесплатно
+EARLY_BIRD_DAYS = int(os.getenv("EARLY_BIRD_DAYS", "30"))      # на сколько дней
+REF_BONUS_DAYS = int(os.getenv("REF_BONUS_DAYS", "7"))         # +дней за активного друга
+BOT_USERNAME = os.getenv("BOT_USERNAME", "habar_price_bot")
 
 # как часто собирать цены отслеживаемых предметов (минуты)
 COLLECT_EVERY_MIN = 15

@@ -3,9 +3,11 @@
 История цен копится с первого дня работы бота — это наш главный актив
 на случай, если внешний API изменится или закроется.
 """
+from datetime import datetime, timedelta
+
 import aiosqlite
 
-from config import DB_PATH
+from config import DB_PATH, EARLY_BIRD_LIMIT, REF_BONUS_DAYS
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -60,6 +62,12 @@ _USER_COLUMNS = [
     ("df_player_id", "TEXT"),
     ("df_player_name", "TEXT"),
     ("blocked", "INTEGER DEFAULT 0"),
+    # --- PRO и рефералы ---
+    ("pro_until", "TEXT"),          # до какой даты активен PRO (NULL = нет)
+    ("early_bird", "INTEGER DEFAULT 0"),   # получил ли ранний доступ (из первых 500)
+    ("ref_by", "INTEGER"),         # кто пригласил (tg_id), NULL если сам
+    ("ref_credited", "INTEGER DEFAULT 0"), # засчитан ли этот юзер пригласившему (антифрод)
+    ("ref_count", "INTEGER DEFAULT 0"),    # сколько активных друзей привёл
 ]
 
 
@@ -129,6 +137,99 @@ async def user_stats() -> dict:
             "with_alerts": await one("SELECT COUNT(DISTINCT tg_id) FROM alerts WHERE active=1"),
             "with_favs": await one("SELECT COUNT(DISTINCT tg_id) FROM watchlist"),
         }
+
+
+# ---------- PRO ----------
+
+async def pro_status(tg_id: int) -> dict:
+    """Статус PRO пользователя + сколько ранних мест осталось."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT pro_until, early_bird, ref_count FROM users WHERE tg_id=?", (tg_id,))
+        row = await cur.fetchone()
+        cur = await db.execute("SELECT COUNT(*) FROM users WHERE early_bird=1")
+        early_taken = (await cur.fetchone())[0]
+    pro_until, early, ref_count = (row or (None, 0, 0))
+    active = False
+    if pro_until:
+        try:
+            active = datetime.fromisoformat(pro_until) > datetime.utcnow()
+        except ValueError:
+            pass
+    return {
+        "pro": active,
+        "pro_until": pro_until if active else None,
+        "early_bird": bool(early),
+        "ref_count": ref_count or 0,
+        "slots_left": max(0, EARLY_BIRD_LIMIT - early_taken),
+    }
+
+
+async def add_pro_days(tg_id: int, days: int, mark_early: bool = False) -> str:
+    """Продлевает PRO на N дней (от текущей даты окончания или от сейчас)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT pro_until FROM users WHERE tg_id=?", (tg_id,))
+        row = await cur.fetchone()
+        base = datetime.utcnow()
+        if row and row[0]:
+            try:
+                cur_until = datetime.fromisoformat(row[0])
+                if cur_until > base:
+                    base = cur_until
+            except ValueError:
+                pass
+        new_until = (base + timedelta(days=days)).isoformat()
+        if mark_early:
+            await db.execute("UPDATE users SET pro_until=?, early_bird=1 WHERE tg_id=?", (new_until, tg_id))
+        else:
+            await db.execute("UPDATE users SET pro_until=? WHERE tg_id=?", (new_until, tg_id))
+        await db.commit()
+        return new_until
+
+
+async def early_slots_left() -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT COUNT(*) FROM users WHERE early_bird=1")
+        return max(0, EARLY_BIRD_LIMIT - (await cur.fetchone())[0])
+
+
+# ---------- рефералы ----------
+
+async def set_referrer(tg_id: int, ref_by: int) -> bool:
+    """Запоминает, кто пригласил (только для новых, без реферера, не самого себя)."""
+    if ref_by == tg_id:
+        return False
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT ref_by FROM users WHERE tg_id=?", (tg_id,))
+        row = await cur.fetchone()
+        if row and row[0]:
+            return False  # реферер уже есть
+        cur = await db.execute("SELECT 1 FROM users WHERE tg_id=?", (ref_by,))
+        if not await cur.fetchone():
+            return False  # пригласившего нет в базе
+        await db.execute("UPDATE users SET ref_by=? WHERE tg_id=?", (ref_by, tg_id))
+        await db.commit()
+        return True
+
+
+async def pending_referrals() -> list[tuple]:
+    """Друзья, которых пора засчитать: привёл реферер, юзер активен, ещё не засчитан.
+
+    Активен = сделал 3+ действия (антифрод против пустых аккаунтов).
+    Возвращает (friend_id, referrer_id).
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT tg_id, ref_by FROM users "
+            "WHERE ref_by IS NOT NULL AND ref_credited=0 AND interactions >= 3 AND blocked=0")
+        return await cur.fetchall()
+
+
+async def mark_referral_credited(friend_id: int, referrer_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE users SET ref_credited=1 WHERE tg_id=?", (friend_id,))
+        await db.execute("UPDATE users SET ref_count=ref_count+1 WHERE tg_id=?", (referrer_id,))
+        await db.commit()
 
 
 async def recent_users(limit: int = 10) -> list[tuple]:

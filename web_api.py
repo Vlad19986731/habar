@@ -14,7 +14,8 @@ from urllib.parse import parse_qsl
 from aiohttp import web
 
 import db
-from config import API_PORT, BOT_TOKEN
+from config import (API_PORT, BOT_TOKEN, BOT_USERNAME, EARLY_BIRD_DAYS,
+                    REF_BONUS_DAYS)
 
 log = logging.getLogger("dfbot.api")
 
@@ -163,6 +164,29 @@ async def api_stash(request, u):
 async def api_ping(request, u):
     """Приложение открыто — пользователь онлайн."""
     return web.json_response({"ok": True})
+
+
+@routes.get("/api/pro")
+@need_auth
+async def api_pro(request, u):
+    """Статус PRO + сколько ранних мест осталось + реф-ссылка."""
+    st = await db.pro_status(u["id"])
+    st["ref_link"] = f"https://t.me/{BOT_USERNAME}?start=ref_{u['id']}"
+    st["ref_bonus_days"] = REF_BONUS_DAYS
+    return web.json_response(st)
+
+
+@routes.post("/api/pro/claim")
+@need_auth
+async def api_pro_claim(request, u):
+    """Забрать ранний доступ: PRO на 30 дней, если места ещё есть."""
+    st = await db.pro_status(u["id"])
+    if st["pro"]:
+        return web.json_response({"ok": False, "reason": "already_pro"})
+    if await db.early_slots_left() <= 0:
+        return web.json_response({"ok": False, "reason": "no_slots"})
+    until = await db.add_pro_days(u["id"], EARLY_BIRD_DAYS, mark_early=True)
+    return web.json_response({"ok": True, "pro_until": until})
 
 
 async def start_api() -> None:
