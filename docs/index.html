@@ -967,15 +967,95 @@ function openExternal(url) {
   window.open(url, '_blank');
 }
 
+/* ---------- профиль игрока ---------- */
+function profGet() { try { return JSON.parse(localStorage.getItem('dfprofile') || 'null'); } catch(e){ return null; } }
+function profSet(p) {
+  localStorage.setItem('dfprofile', JSON.stringify(p));
+  if (cloudOk()) { try { tg.CloudStorage.setItem('dfprofile', JSON.stringify(p), ()=>{}); } catch(e){} }
+}
+function profClear() {
+  localStorage.removeItem('dfprofile');
+  if (cloudOk()) { try { tg.CloudStorage.removeItem('dfprofile', ()=>{}); } catch(e){} }
+}
+
+async function loadProfileData(prof) {
+  const box = document.getElementById('stashbox');
+  if (!box) return;
+  let html = '';
+  try {
+    const sv = await api('GetPlayerOperationStashValue', {playerId: prof.id});
+    let raw = sv.stashValue !== undefined ? sv.stashValue : sv.value;
+    let val = null;
+    if (raw && typeof raw === 'object') val = raw.value !== undefined ? raw.value : raw.stashValue;
+    else if (typeof raw === 'number') val = raw;
+    let hist = [];
+    try {
+      const h = await api('GetPlayerOperationHistoricalStashValue',
+        {playerId: prof.id, startTime: new Date(Date.now() - 30 * 864e5).toISOString().slice(0,13) + ':00:00Z'});
+      const arr = h.values || h.stashValues || h.prices || [];
+      hist = arr.map(x => (typeof x === 'number') ? x : (x.value !== undefined ? x.value : x.stashValue))
+                .filter(x => typeof x === 'number');
+    } catch(e){}
+    if (val === null && hist.length) val = hist[hist.length - 1];
+    if (val === null || val === undefined) throw new Error('нет данных');
+    html = '<div class="label">Стоимость стэша · live</div>' +
+      '<div class="bigprice num" style="font-size:24px;margin-top:6px">' + fmt(val) + ' <span style="color:var(--orange)">₮</span></div>' +
+      (hist.length > 1 ? chartSvg(hist, 320, 56) + '<div class="chart-meta"><span>ДИНАМИКА</span><span>30 ДНЕЙ</span></div>' : '');
+  } catch(e) {
+    html = '<div class="hint" style="text-align:left;padding:4px 0 0">📡 Сервис статистики ещё собирает данные по этому аккаунту — так бывает с теми, кого ищут впервые. Загляни через день-два, стэш появится.</div>';
+  }
+  try {
+    const st = await api('GetPlayerOperationStats', {playerId: prof.id});
+    const s = st.stats || st;
+    const pick = (labels) => {
+      const tiles = [];
+      for (const [key, label, fmt2] of labels) {
+        const v = s[key];
+        if (v !== undefined && v !== null) tiles.push([label, fmt2 ? fmt2(v) : v]);
+      }
+      return tiles;
+    };
+    const tiles = pick([
+      ['totalMatches', 'Рейды'], ['matches', 'Рейды'],
+      ['totalKills', 'Убийства'], ['kills', 'Убийства'],
+      ['kdRatio', 'K/D', v => (+v).toFixed(1)], ['kd', 'K/D', v => (+v).toFixed(1)],
+      ['survivalRate', 'Выживание', v => Math.round(v * 100) + '%'],
+      ['winRate', 'Победы', v => Math.round(v * 100) + '%'],
+    ]).slice(0, 3);
+    if (tiles.length) {
+      html += '<div style="display:flex;gap:8px;margin-top:12px">' + tiles.map(t =>
+        '<div style="flex:1;background:var(--well);border:1px solid var(--border);padding:10px 6px;text-align:center;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)">' +
+        '<div style="color:var(--white);font-size:16px;font-weight:800" class="num">' + t[1] + '</div>' +
+        '<div style="color:var(--text3);font-size:8.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;margin-top:3px;font-family:var(--mono)">' + t[0] + '</div></div>').join('') + '</div>';
+    }
+  } catch(e){}
+  box.innerHTML = html;
+}
+
 function renderMore() {
-  view.innerHTML =
-    '<div style="display:flex;align-items:center;gap:12px">' +
-    '<div style="width:48px;height:48px;background:var(--well);border:1px solid var(--orange);border-radius:8px 8px 8px 0;display:flex;align-items:center;justify-content:center;color:var(--orange);font-size:14px;font-weight:800">ОП</div>' +
-    '<div><div style="color:var(--text);font-size:17px;font-weight:800">Оператор</div>' +
-    '<div style="color:var(--text2);font-size:11.5px;font-weight:600;margin-top:2px" id="seasonline">Operations</div></div></div>' +
-    '<div class="card cut" style="margin-top:16px"><div class="strip"></div>' +
-    '<div class="label">Стоимость инвентаря</div>' +
-    '<p style="color:var(--text2);font-size:13px;line-height:1.55;margin-top:8px">Привяжем твой игровой ник — и здесь появится живая стоимость твоего стэша с динамикой за 30 дней. Уже в разработке.</p></div>' +
+  const prof = profGet();
+  const head = prof
+    ? '<div style="display:flex;align-items:center;gap:12px">' +
+      '<div style="width:48px;height:48px;background:var(--well);border:1px solid var(--orange);display:flex;align-items:center;justify-content:center;color:var(--orange);font-size:13px;font-weight:800;font-family:var(--mono);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)">ОП</div>' +
+      '<div style="flex:1;min-width:0"><div style="color:var(--text);font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(prof.name) + '</div>' +
+      '<div style="color:var(--text3);font-size:9.5px;font-family:var(--mono);letter-spacing:.06em;margin-top:2px">УР. ' + (prof.lvl || 1) + ' · ID ' + esc(String(prof.dfid || '—')) + '</div></div>' +
+      '<button class="langbtn" id="dfunlink">ОТВЯЗАТЬ</button></div>'
+    : '<div style="display:flex;align-items:center;gap:12px">' +
+      '<div style="width:48px;height:48px;background:var(--well);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;font-weight:800;font-family:var(--mono);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)">ОП</div>' +
+      '<div><div style="color:var(--text);font-size:17px;font-weight:800">Оператор</div>' +
+      '<div style="color:var(--text2);font-size:11.5px;font-weight:600;margin-top:2px">не привязан</div></div></div>';
+
+  const profileCard = prof
+    ? '<div class="card cut" style="margin-top:16px"><div class="strip"></div>' +
+      '<div id="stashbox"><div class="spin" style="margin:8px auto"></div></div></div>'
+    : '<div class="card cut" style="margin-top:16px"><div class="strip"></div>' +
+      '<div class="label">Привязка аккаунта</div>' +
+      '<div class="hint" style="text-align:left;padding:8px 0 10px">Введи свой игровой ник — увидишь стоимость своего стэша и статистику прямо здесь.</div>' +
+      '<input class="search" id="dfnick" style="margin-top:0" placeholder="Игровой ник или Delta Force ID" autocomplete="off">' +
+      '<div class="btns" style="margin-top:10px"><button class="btn fill" id="dflink">Привязать</button></div>' +
+      '<div class="hint" id="dferr" style="text-align:left;padding:6px 0 0;color:var(--red)"></div></div>';
+
+  view.innerHTML = head + profileCard +
     '<div class="prem cut"><h4>[ ХАБАР PRO ]</h4>' +
     '<p>Безлимитные алерты по цене<br>Флип-финдер в реальном времени<br>История цен за 90 дней</p>' +
     '<div class="btn fill" style="display:block;margin-top:14px" id="probtn">Скоро · следи в боте</div></div>' +
@@ -983,14 +1063,32 @@ function renderMore() {
     '<div class="list">' +
     '<div class="row" style="cursor:default"><span class="rmain"><b>Флип-финдер</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
     '<div class="row" style="cursor:default"><span class="rmain"><b>Крафт-калькулятор</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
-    '<div class="row" style="cursor:default"><span class="rmain"><b>Стоимость инвентаря по нику</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
     '</div>' +
     '<div class="hint">🔔 Цены и алерты в чате: <b>@habar_price_bot</b><br><span style="font-size:11px">Не аффилирован с TiMi Studios / Tencent · данные deltaforceapi.com</span></div>';
+
   $('#probtn').onclick = openBot;
-  api('GetSeasonCurrent').then(d => {
-    const el = $('#seasonline');
-    if (el && d.season) el.textContent = 'Сезон ' + d.season.number + ' «' + d.season.name + '» · Operations';
-  }).catch(()=>{});
+  if (prof) {
+    $('#dfunlink').onclick = () => { profClear(); renderMore(); };
+    loadProfileData(prof);
+  } else {
+    $('#dflink').onclick = async () => {
+      const v = ($('#dfnick').value || '').trim();
+      const err = document.getElementById('dferr');
+      if (v.length < 2) { if (err) err.textContent = 'Введи ник (минимум 2 символа)'; return; }
+      $('#dflink').textContent = 'ИЩЕМ...';
+      const payload = /^\d{12,}$/.test(v) ? {deltaForceId: v} : {name: v};
+      try {
+        const d = await api('GetPlayer', payload);
+        if (!d.player) throw new Error('not found');
+        profSet({id: d.player.id, name: d.player.name, dfid: d.player.deltaForceId, lvl: d.player.levelOperations});
+        if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
+        renderMore();
+      } catch(e) {
+        $('#dflink').textContent = 'ПРИВЯЗАТЬ';
+        if (err) err.textContent = 'Не нашли такого оператора. Проверь ник — регистр важен.';
+      }
+    };
+  }
 }
 
 /* ---------- события ---------- */
