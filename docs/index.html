@@ -654,7 +654,47 @@ function marketHeader() {
 
 let catFilter = null;
 
+/* ---------- бесконечная прокрутка списка ---------- */
+let _listItems = [], _listShown = 0, _listObserver = null;
+const LIST_CHUNK = 30;
+
+function stopInfiniteList() {
+  if (_listObserver) { _listObserver.disconnect(); _listObserver = null; }
+}
+
+function appendListChunk() {
+  const listEl = document.getElementById('catlist');
+  const moreEl = document.getElementById('catmore');
+  if (!listEl) { stopInfiniteList(); return; }
+  const next = _listItems.slice(_listShown, _listShown + LIST_CHUNK);
+  listEl.insertAdjacentHTML('beforeend', next.map(it => rowHtml(it)).join(''));
+  fillPrices(next.map(i => i.id), false);
+  _listShown += next.length;
+  if (moreEl) {
+    if (_listShown < _listItems.length) {
+      moreEl.innerHTML = '<div class="hint" style="padding:10px">Показано ' + _listShown + ' из ' + _listItems.length + ' · листай ниже</div>';
+    } else {
+      stopInfiniteList();
+      moreEl.innerHTML = '<div class="hint" style="padding:10px">Это все ' + _listItems.length + ' предметов</div>';
+    }
+  }
+}
+
+function startInfiniteList(items) {
+  stopInfiniteList();
+  _listItems = items; _listShown = 0;
+  appendListChunk();
+  const moreEl = document.getElementById('catmore');
+  if (moreEl && _listShown < _listItems.length) {
+    _listObserver = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) appendListChunk();
+    }, {root: view, rootMargin: '400px'});
+    _listObserver.observe(moreEl);
+  }
+}
+
 function renderMarket() {
+  stopInfiniteList();
   if (!CATALOG.length) {
     view.innerHTML = marketHeader() + (catError
       ? '<div class="hint">Не удалось загрузить каталог 😕<br>Проверь интернет и перезапусти приложение.</div>'
@@ -683,10 +723,10 @@ function renderMarket() {
         '<span class="chip" data-cat="">‹ Все категории</span>' +
         '<span class="chip on">' + c[2] + ' ' + c[1] + ' · ' + items.length + '</span>' +
       '</div>' +
-      '<div class="list" style="margin-top:10px">' + items.slice(0,30).map(it => rowHtml(it)).join('') + '</div>' +
-      (items.length > 30 ? '<div class="hint">Показаны первые 30 — сузь поиском</div>' : '');
+      '<div class="list" id="catlist" style="margin-top:10px"></div>' +
+      '<div id="catmore"></div>';
     bindSearch(); updWipe();
-    fillPrices(items.slice(0,30).map(i=>i.id), false);
+    startInfiniteList(items);
     return;
   }
   // главная рынка: статистика + категории
@@ -1343,6 +1383,7 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
   b.classList.add('on');
   tab = b.dataset.tab;
+  stopInfiniteList();
   view.classList.remove('fade'); void view.offsetWidth; view.classList.add('fade');
   if (tab === 'home') renderHome();
   else if (tab === 'market') renderMarket();
