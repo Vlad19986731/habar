@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS users (
     username   TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
+-- база клиентов: активность, привязка игрового аккаунта
+CREATE INDEX IF NOT EXISTS idx_users_seen ON users(last_seen);
 CREATE TABLE IF NOT EXISTS items (
     id       TEXT PRIMARY KEY,
     name     TEXT NOT NULL,
@@ -42,20 +44,94 @@ CREATE TABLE IF NOT EXISTS price_history (
 """
 
 
+# колонки базы клиентов, которых может не быть в старой базе
+_USER_COLUMNS = [
+    ("first_name", "TEXT"),
+    ("last_name", "TEXT"),
+    ("lang", "TEXT"),
+    ("is_premium", "INTEGER DEFAULT 0"),
+    ("last_seen", "TEXT"),
+    ("interactions", "INTEGER DEFAULT 0"),
+    ("df_player_id", "TEXT"),
+    ("df_player_name", "TEXT"),
+    ("blocked", "INTEGER DEFAULT 0"),
+]
+
+
 async def init() -> None:
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.executescript(SCHEMA)
+        # сначала таблицы, потом миграция колонок, потом индексы
+        await db.executescript(SCHEMA.split("-- база клиентов")[0])
+        cur = await db.execute("PRAGMA table_info(users)")
+        have = {r[1] for r in await cur.fetchall()}
+        for name, decl in _USER_COLUMNS:
+            if name not in have:
+                await db.execute(f"ALTER TABLE users ADD COLUMN {name} {decl}")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_users_seen ON users(last_seen)")
         await db.commit()
 
 
-async def upsert_user(tg_id: int, username: str | None) -> None:
+async def upsert_user(tg_id: int, username: str | None, first_name: str | None = None,
+                      last_name: str | None = None, lang: str | None = None,
+                      is_premium: bool = False) -> None:
+    """Создаёт/обновляет карточку клиента и отмечает активность (last_seen)."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "INSERT INTO users(tg_id, username) VALUES(?,?) "
-            "ON CONFLICT(tg_id) DO UPDATE SET username=excluded.username",
-            (tg_id, username),
+            "INSERT INTO users(tg_id, username, first_name, last_name, lang, is_premium, last_seen, interactions) "
+            "VALUES(?,?,?,?,?,?,datetime('now'),1) "
+            "ON CONFLICT(tg_id) DO UPDATE SET "
+            "  username=excluded.username,"
+            "  first_name=COALESCE(excluded.first_name, users.first_name),"
+            "  last_name=COALESCE(excluded.last_name, users.last_name),"
+            "  lang=COALESCE(excluded.lang, users.lang),"
+            "  is_premium=excluded.is_premium,"
+            "  last_seen=datetime('now'),"
+            "  interactions=users.interactions+1,"
+            "  blocked=0",
+            (tg_id, username, first_name, last_name, lang, int(is_premium)),
         )
         await db.commit()
+
+
+async def mark_blocked(tg_id: int) -> None:
+    """Пользователь заблокировал бота — не шлём ему пуши."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE users SET blocked=1 WHERE tg_id=?", (tg_id,))
+        await db.commit()
+
+
+async def link_df_player(tg_id: int, player_id: str, player_name: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE users SET df_player_id=?, df_player_name=? WHERE tg_id=?",
+                         (player_id, player_name, tg_id))
+        await db.commit()
+
+
+async def user_stats() -> dict:
+    """Сводка по базе клиентов."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async def one(sql):
+            cur = await db.execute(sql)
+            return (await cur.fetchone())[0]
+        return {
+            "total": await one("SELECT COUNT(*) FROM users"),
+            "online": await one("SELECT COUNT(*) FROM users WHERE last_seen > datetime('now','-5 minutes')"),
+            "today": await one("SELECT COUNT(*) FROM users WHERE last_seen > datetime('now','-1 day')"),
+            "week": await one("SELECT COUNT(*) FROM users WHERE last_seen > datetime('now','-7 days')"),
+            "new_today": await one("SELECT COUNT(*) FROM users WHERE created_at > datetime('now','-1 day')"),
+            "linked": await one("SELECT COUNT(*) FROM users WHERE df_player_id IS NOT NULL"),
+            "blocked": await one("SELECT COUNT(*) FROM users WHERE blocked=1"),
+            "with_alerts": await one("SELECT COUNT(DISTINCT tg_id) FROM alerts WHERE active=1"),
+            "with_favs": await one("SELECT COUNT(DISTINCT tg_id) FROM watchlist"),
+        }
+
+
+async def recent_users(limit: int = 10) -> list[tuple]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT tg_id, username, first_name, last_seen, interactions, df_player_name "
+            "FROM users ORDER BY last_seen DESC LIMIT ?", (limit,))
+        return await cur.fetchall()
 
 
 async def replace_items(items: list[dict]) -> int:

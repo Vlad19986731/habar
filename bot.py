@@ -12,7 +12,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from aiogram import Bot, Dispatcher, F, Router
+from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandObject, CommandStart
@@ -25,7 +25,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import api
 import db
 from aliases import normalize_query
-from config import API_POLITE_DELAY, BOT_TOKEN, COLLECT_EVERY_MIN
+from config import (ADMIN_IDS, API_POLITE_DELAY, BOT_TOKEN, COLLECT_EVERY_MIN,
+                    NEWS_GIT_PUSH, WEB_DIR)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("dfbot")
@@ -33,6 +34,20 @@ log = logging.getLogger("dfbot")
 router = Router()
 
 BARS = "▁▂▃▄▅▆▇█"
+
+
+class TrackUserMiddleware(BaseMiddleware):
+    """Каждое действие любого пользователя обновляет карточку клиента и last_seen."""
+
+    async def __call__(self, handler, event, data):
+        u = data.get("event_from_user")
+        if u:
+            try:
+                await db.upsert_user(u.id, u.username, u.first_name, u.last_name,
+                                     u.language_code, bool(getattr(u, "is_premium", False)))
+            except Exception:
+                log.exception("Не смог обновить карточку пользователя %s", u.id)
+        return await handler(event, data)
 
 
 # ---------- helpers ----------
@@ -215,6 +230,32 @@ async def cmd_start(m: Message, command: CommandObject):
         "/wipe — сколько до вайпа\n\n"
         f"<i>В базе {n} предметов · данные: deltaforceapi.com</i>"
     )
+
+
+@router.message(Command("stats"))
+async def cmd_stats(m: Message):
+    """Админ-панель: сводка по базе клиентов."""
+    if m.from_user.id not in ADMIN_IDS:
+        return
+    s = await db.user_stats()
+    lines = [
+        "📊 <b>База клиентов</b>\n",
+        f"👥 Всего: <b>{s['total']}</b>",
+        f"🟢 Онлайн сейчас: <b>{s['online']}</b> <i>(активность за 5 мин)</i>",
+        f"📅 Активны за сутки: <b>{s['today']}</b> · за неделю: <b>{s['week']}</b>",
+        f"✨ Новых за сутки: <b>{s['new_today']}</b>",
+        "",
+        f"🎮 Привязали игру: <b>{s['linked']}</b>",
+        f"🔔 Следят за ценой: <b>{s['with_alerts']}</b>",
+        f"⭐ С избранным: <b>{s['with_favs']}</b>",
+        f"🚫 Заблокировали бота: <b>{s['blocked']}</b>",
+        "\n<b>Последние активные:</b>",
+    ]
+    for tg_id, uname, fname, seen, cnt, df_name in await db.recent_users(8):
+        who = ("@" + uname) if uname else (fname or str(tg_id))
+        game = f" · 🎮 {df_name}" if df_name else ""
+        lines.append(f"• {who} — {seen or '—'} <i>({cnt} действий)</i>{game}")
+    await m.answer("\n".join(lines))
 
 
 @router.message(Command("wipe"))
@@ -433,8 +474,24 @@ async def refresh_items():
 
 
 REPO_DIR = Path(__file__).parent
-NEWS_PATH = REPO_DIR / "docs" / "news.json"
+NEWS_PATH = WEB_DIR / "news.json"
 STEAM_NEWS_URL = "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
+
+
+def publish(rel_path: str, commit_msg: str) -> None:
+    """Публикация сгенерированного файла.
+
+    На сервере nginx раздаёт WEB_DIR напрямую — git не нужен.
+    Локально пушим в GitHub Pages.
+    """
+    if not NEWS_GIT_PUSH:
+        return
+    for cmd in (["git", "add", rel_path],
+                ["git", "commit", "-m", commit_msg],
+                ["git", "push"]):
+        res = subprocess.run(cmd, cwd=str(REPO_DIR), capture_output=True, timeout=120)
+        if res.returncode != 0 and cmd[1] != "commit":
+            log.warning("git %s: %s", cmd[1], res.stderr.decode(errors="ignore")[:200])
 
 
 TG_NEWS_URL = "https://t.me/s/deltaforce_ru"
@@ -544,7 +601,7 @@ def _parse_tg_posts(page: str, channel_limit: int = 6) -> list[dict]:
     return posts[-channel_limit:][::-1]  # свежие сверху
 
 
-RUNAMES_PATH = REPO_DIR / "docs" / "names_ru.json"
+RUNAMES_PATH = WEB_DIR / "names_ru.json"
 
 
 async def refresh_ru_names():
@@ -574,12 +631,7 @@ async def refresh_ru_names():
         if new_cnt == 0 and RUNAMES_PATH.exists():
             return
         RUNAMES_PATH.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
-        for cmd in (["git", "add", "docs/names_ru.json"],
-                    ["git", "commit", "-m", "names: ru translations update"],
-                    ["git", "push"]):
-            res = subprocess.run(cmd, cwd=str(REPO_DIR), capture_output=True, timeout=120)
-            if res.returncode != 0 and cmd[1] != "commit":
-                log.warning("git %s: %s", cmd[1], res.stderr.decode(errors="ignore")[:200])
+        publish("docs/names_ru.json", "names: ru translations update")
         log.info("Русские названия готовы: всего %s, новых %s", len(out), new_cnt)
     except Exception:
         log.exception("Не удалось обновить русские названия")
@@ -621,12 +673,7 @@ async def refresh_news():
             json.dumps({"updated": datetime.now(timezone.utc).isoformat(), **news}, ensure_ascii=False, indent=1),
             encoding="utf-8",
         )
-        for cmd in (["git", "add", "docs/news.json"],
-                    ["git", "commit", "-m", "news: auto-update"],
-                    ["git", "push"]):
-            res = subprocess.run(cmd, cwd=str(REPO_DIR), capture_output=True, timeout=120)
-            if res.returncode != 0 and cmd[1] != "commit":
-                log.warning("git %s: %s", cmd[1], res.stderr.decode(errors="ignore")[:200])
+        publish("docs/news.json", "news: auto-update")
         log.info("Новости обновлены: steam=%s", len(steam))
     except Exception:
         log.exception("Не удалось обновить новости")
@@ -662,8 +709,14 @@ async def collect_and_check(bot: Bot):
                     f"<i>Твой порог: {fmt(threshold)} ₮</i>",
                 )
                 await db.alert_deactivate(alert_id)
-            except Exception:
-                log.exception("Не смог отправить алерт tg_id=%s", tg_id)
+            except Exception as e:
+                # бот заблокирован пользователем — отмечаем и не тревожим больше
+                if "bot was blocked" in str(e).lower() or "user is deactivated" in str(e).lower():
+                    await db.mark_blocked(tg_id)
+                    await db.alert_deactivate(alert_id)
+                    log.info("Пользователь %s заблокировал бота", tg_id)
+                else:
+                    log.exception("Не смог отправить алерт tg_id=%s", tg_id)
 
 
 # ---------- main ----------
@@ -675,6 +728,8 @@ async def main():
     await db.init()
     bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
+    dp.message.middleware(TrackUserMiddleware())
+    dp.callback_query.middleware(TrackUserMiddleware())
     dp.include_router(router)
 
     if await db.items_count() == 0:
