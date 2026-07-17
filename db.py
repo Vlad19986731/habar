@@ -332,6 +332,42 @@ async def stash_series(player_id: str, days: int = 30) -> list[tuple]:
         return await cur.fetchall()
 
 
+async def all_item_ids() -> list[str]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT id FROM items")
+        return [r[0] for r in await cur.fetchall()]
+
+
+async def history_count() -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT COUNT(*) FROM price_history")
+        return (await cur.fetchone())[0]
+
+
+async def history_rows_7d() -> list[tuple]:
+    """(item_id, ts, price) за 7 дней, отсортировано — сырьё для флипов."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT item_id, ts, price FROM price_history "
+            "WHERE ts > datetime('now','-7 days') ORDER BY item_id, ts")
+        return await cur.fetchall()
+
+
+async def history_add_many(rows: list[tuple]) -> None:
+    """rows: [(item_id, ts, price), ...] — массовая вставка (бэкфилл)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.executemany(
+            "INSERT OR IGNORE INTO price_history(item_id, ts, price) VALUES(?,?,?)", rows)
+        await db.commit()
+
+
+async def history_cleanup(days: int = 90) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM price_history WHERE ts < datetime('now', ?)", (f"-{days} days",))
+        await db.execute("DELETE FROM stash_history WHERE ts < datetime('now','-180 days')")
+        await db.commit()
+
+
 async def history_add(item_id: str, ts: str, price: float) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(

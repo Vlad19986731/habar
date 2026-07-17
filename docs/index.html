@@ -121,6 +121,13 @@
   }
   .rmain span{display:block; color:var(--text2); font-size:10.5px; font-weight:600; margin-top:1px}
   .rspark{width:56px; height:20px; flex:none}
+  .fcard{
+    display:block; width:100%; text-align:left; background:var(--surface);
+    border:1px solid var(--border); border-radius:0; padding:11px 12px;
+    cursor:pointer; font-family:inherit; color:var(--text);
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+  }
+  .fcard:active{border-color:var(--orange)}
   .pbar{height:6px; background:#0A1218; border:1px solid var(--border); border-radius:0; margin-top:12px; overflow:hidden}
   .pbar i{display:block; height:100%; background:repeating-linear-gradient(45deg,#0FF796 0px,#0FF796 6px,#0a9c60 6px,#0a9c60 12px)}
   .livechip{
@@ -891,16 +898,98 @@ async function renderStash() {
   fillPrices(items.map(i=>i.id), true);
 }
 
-function renderFlips() {
+/* ---------- флипы: сканер рынка ---------- */
+let FLIPS = null, FLIPS_TS = 0, flipTab = 'dips';
+
+function flipSpark(pts, color) {
+  if (!pts || pts.length < 2) return '';
+  const w = 76, h = 26;
+  const lo = Math.min.apply(null, pts), hi = Math.max.apply(null, pts);
+  const x = i => (i * (w - 4) / (pts.length - 1) + 2).toFixed(1);
+  const y = v => (hi === lo ? h / 2 : 3 + (hi - v) * (h - 6) / (hi - lo)).toFixed(1);
+  return '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:' + w + 'px;height:' + h + 'px;flex:none">' +
+    '<polyline points="' + pts.map((v, i) => x(i) + ',' + y(v)).join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.5"/></svg>';
+}
+
+function flipCard(f, kind) {
+  const it = CATALOG.find(i => i.id === f.id);
+  if (!it) return '';
+  let mid, big, sub, col;
+  if (kind === 'dips') {
+    col = 'var(--green)';
+    mid = '<span class="num">сейчас <b style="color:var(--white)">' + fmt(f.price) + '</b></span>' +
+          '<span style="color:var(--text3)">→</span>' +
+          '<span class="num">средняя 7д <b style="color:var(--white)">' + fmt(f.avg) + '</b></span>';
+    big = '+' + fmt(f.margin) + ' ₮ <span style="font-size:12px">(+' + f.pct + '%)</span>';
+    sub = 'если продать по средней · комиссия 15% учтена';
+  } else if (kind === 'movers') {
+    col = 'var(--amber)';
+    mid = '<span class="num">сутки назад <b style="color:var(--white)">' + fmt(f.prev) + '</b></span>' +
+          '<span style="color:var(--text3)">→</span>' +
+          '<span class="num">сейчас <b style="color:var(--white)">' + fmt(f.price) + '</b></span>';
+    big = '▲ +' + f.pct + '% за 24ч';
+    sub = 'растёт — возможно, патч или ивент подняли спрос';
+  } else {
+    col = 'var(--orange)';
+    mid = '<span class="num">низ <b style="color:var(--white)">' + fmt(f.lo) + '</b></span>' +
+          '<span style="color:var(--text3)">↕</span>' +
+          '<span class="num">верх <b style="color:var(--white)">' + fmt(f.hi) + '</b></span>';
+    big = '↕ ' + f.pct + '% размах за 24ч';
+    sub = 'ловится снизу вилки, продаётся сверху';
+  }
+  return '<button class="fcard" data-id="' + f.id + '">' +
+    '<div style="display:flex;align-items:center;gap:9px">' +
+      '<span class="well" style="width:34px;height:34px"><span class="ab">' + abbr(it.name) + '</span>' +
+        '<img loading="lazy" src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
+      '<b style="flex:1;min-width:0;color:var(--white);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left">' + displayName(it) + '</b>' +
+      flipSpark(f.spark, col) +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-top:9px;font-size:11.5px;color:var(--text2)">' + mid + '</div>' +
+    '<div style="display:flex;align-items:baseline;gap:8px;margin-top:7px;border-top:1px solid var(--divider);padding-top:8px">' +
+      '<span class="num" style="color:' + col + ';font-size:16px;font-weight:800">' + big + '</span>' +
+      '<span style="color:var(--text3);font-size:10px;margin-left:auto">' + sub + '</span>' +
+    '</div></button>';
+}
+
+function drawFlips() {
+  const el = document.getElementById('flipbody');
+  if (!el) return;
+  if (!FLIPS) { el.innerHTML = '<div class="spin"></div>'; return; }
+  const list = FLIPS[flipTab] || [];
+  if (!list.length) {
+    el.innerHTML = '<div class="hint" style="padding:22px 14px">Сейчас в этой категории пусто — рынок спокоен.<br>Сканер проверяет все ' + (FLIPS.scanned || '—') + ' предметов каждый час.</div>';
+    return;
+  }
+  el.innerHTML = list.map(f => flipCard(f, flipTab)).join('');
+}
+
+async function renderFlips() {
+  const upd = FLIPS && FLIPS.updated ? new Date(FLIPS.updated) : null;
   view.innerHTML =
     '<div class="h1">Флипы</div>' +
-    '<div class="sub">Максимальная маржа прямо сейчас · комиссия аукциона 15% учтена</div>' +
-    '<div class="card cut soon" style="margin-top:16px"><div class="strip"></div>' +
-    '<div class="dia"><i></i></div>' +
-    '<h3>Флип-финдер скоро</h3>' +
-    '<p>Сканируем аукцион и покажем связки «купил дёшево → продал дорого» с маржой после комиссии и оценкой ликвидности.</p>' +
-    '<div class="cta" id="flipcta">Напомнить в боте</div></div>';
-  $('#flipcta').onclick = openBot;
+    '<div class="sub" id="flipsub">' + (upd ? 'обновлено ' + upd.toLocaleTimeString('ru', {hour: '2-digit', minute: '2-digit'}) : 'сканер рынка') + ' · комиссия 15% учтена</div>' +
+    '<div class="chips" style="margin-top:12px">' +
+      '<span class="chip' + (flipTab === 'dips' ? ' on' : '') + '" data-ftab="dips">📉 Просадки</span>' +
+      '<span class="chip' + (flipTab === 'movers' ? ' on' : '') + '" data-ftab="movers">🚀 Растут</span>' +
+      '<span class="chip' + (flipTab === 'volatile' ? ' on' : '') + '" data-ftab="volatile">⚡ Качели</span>' +
+    '</div>' +
+    '<div id="flipbody" style="display:flex;flex-direction:column;gap:8px;margin-top:10px"><div class="spin"></div></div>' +
+    '<div class="hint" style="padding:12px 4px 0;font-size:10.5px">Не гарантия прибыли: рынок может уйти. Тапни предмет — там график и слежка за ценой.</div>';
+  if (!FLIPS || Date.now() - FLIPS_TS > 5 * 60e3) {
+    try {
+      const r = await fetchT('flips.json?_=' + Date.now());
+      FLIPS = await r.json();
+      FLIPS_TS = Date.now();
+      const s = document.getElementById('flipsub');
+      if (s && FLIPS.updated) s.textContent = 'обновлено ' +
+        new Date(FLIPS.updated).toLocaleTimeString('ru', {hour: '2-digit', minute: '2-digit'}) + ' · комиссия 15% учтена';
+    } catch(e) {
+      const el = document.getElementById('flipbody');
+      if (el) el.innerHTML = '<div class="hint" style="padding:22px 14px">Сканер рынка ещё копит данные — флипы появятся в течение часа после запуска сервера.</div>';
+      return;
+    }
+  }
+  drawFlips();
 }
 
 async function renderHome() {
@@ -1142,7 +1231,6 @@ function renderMore() {
     '<div class="btn fill" style="display:block;margin-top:14px" id="probtn">Скоро · следи в боте</div></div>' +
     '<div class="label sect" style="margin-top:16px">В разработке</div>' +
     '<div class="list">' +
-    '<div class="row" style="cursor:default"><span class="rmain"><b>Флип-финдер</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
     '<div class="row" style="cursor:default"><span class="rmain"><b>Крафт-калькулятор</b></span><span style="color:var(--amber);font-size:10px;font-weight:800;letter-spacing:.08em">СКОРО</span></div>' +
     '</div>' +
     '<div class="hint">🔔 Цены и алерты в чате: <b>@habar_price_bot</b><br><span style="font-size:11px">Не аффилирован с TiMi Studios / Tencent · данные deltaforceapi.com</span></div>';
@@ -1184,7 +1272,9 @@ view.addEventListener('click', e => {
   if (rm) { handleRemoveFav(rm.dataset.rm); return; }
   const cc = e.target.closest('[data-cat]');
   if (cc) { catFilter = cc.dataset.cat || null; renderMarket(); return; }
-  const row = e.target.closest('.row,.ncard');
+  const ft = e.target.closest('[data-ftab]');
+  if (ft) { flipTab = ft.dataset.ftab; renderFlips(); return; }
+  const row = e.target.closest('.row,.ncard,.fcard');
   if (!row) return;
   if (row.dataset.nidx !== undefined) { renderArticle(+row.dataset.nidx); return; }
   if (row.dataset.url) { openExternal(row.dataset.url); return; }

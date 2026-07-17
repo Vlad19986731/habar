@@ -692,6 +692,130 @@ async def refresh_news():
         log.exception("Не удалось обновить новости")
 
 
+# ---------- сканер рынка и флипы ----------
+FLIPS_PATH = WEB_DIR / "flips.json"
+FLIP_MIN_PRICE = 3000      # дешевле — пыль, комиссия съест всё
+FLIP_MIN_POINTS = 24       # минимум сутки истории на предмет
+
+
+async def backfill_history():
+    """Разовый импорт 7-дневной истории всех предметов в НАШУ базу.
+
+    После него флипы работают сразу, а не через неделю накопления.
+    """
+    if await db.history_count() > 30000:
+        return
+    log.info("Бэкфилл истории цен: импортирую 7 дней по всем предметам...")
+    ids = await db.all_item_ids()
+    total = 0
+    for i, item_id in enumerate(ids):
+        try:
+            series = await api.get_series(item_id, days=7)
+            rows = [(item_id, p["timestamp"], p["priceAvg"])
+                    for p in series if p.get("priceAvg")]
+            if rows:
+                await db.history_add_many(rows)
+                total += len(rows)
+        except Exception:
+            pass
+        if (i + 1) % 300 == 0:
+            log.info("Бэкфилл: %s/%s предметов...", i + 1, len(ids))
+        await asyncio.sleep(0.1)
+    log.info("Бэкфилл готов: %s точек истории", total)
+
+
+async def market_snapshot():
+    """Каждый час: снимок цен ВСЕХ предметов в нашу базу."""
+    ids = await db.all_item_ids()
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
+    rows, fails = [], 0
+    for item_id in ids:
+        try:
+            p = await api.get_price(item_id)
+            if p and p.get("price"):
+                rows.append((item_id, now, p["price"]))
+        except Exception:
+            fails += 1
+        await asyncio.sleep(0.1)
+    if rows:
+        await db.history_add_many(rows)
+    log.info("Снимок рынка: %s цен (%s ошибок)", len(rows), fails)
+    await compute_flips()
+
+
+def _spark(pts: list[float], n: int = 16) -> list[int]:
+    if len(pts) <= n:
+        return [int(p) for p in pts]
+    step = len(pts) / n
+    return [int(pts[int(i * step)]) for i in range(n)]
+
+
+async def compute_flips():
+    """Считает флипы из НАШЕЙ истории и публикует web/flips.json."""
+    try:
+        rows = await db.history_rows_7d()
+        by_item: dict[str, list[float]] = {}
+        for item_id, _ts, price in rows:
+            by_item.setdefault(item_id, []).append(price)
+
+        dips, movers, volatile = [], [], []
+        for item_id, pts in by_item.items():
+            if len(pts) < FLIP_MIN_POINTS:
+                continue
+            cur = pts[-1]
+            if cur < FLIP_MIN_PRICE:
+                continue
+            avg = sum(pts) / len(pts)
+            # просадка: купить сейчас, продать по средней (минус комиссия 15%)
+            margin = avg * 0.85 - cur
+            pct = margin / cur * 100
+            if pct >= 8:
+                dips.append({"id": item_id, "price": int(cur), "avg": int(avg),
+                             "margin": int(margin), "pct": round(pct, 1),
+                             "spark": _spark(pts)})
+            # рост за сутки
+            if len(pts) >= 25:
+                prev = pts[-25]
+                mp = (cur - prev) / prev * 100 if prev else 0
+                if mp >= 10:
+                    movers.append({"id": item_id, "price": int(cur), "prev": int(prev),
+                                   "pct": round(mp, 1), "spark": _spark(pts)})
+            # внутридневные качели
+            last24 = pts[-24:]
+            lo, hi = min(last24), max(last24)
+            mid = sum(last24) / len(last24)
+            rng = (hi - lo) / mid * 100 if mid else 0
+            # качели интересны, только если размах перекрывает комиссию
+            if rng >= 18:
+                volatile.append({"id": item_id, "price": int(cur), "lo": int(lo),
+                                 "hi": int(hi), "pct": round(rng, 1), "spark": _spark(last24)})
+
+        dips.sort(key=lambda x: -x["pct"])
+        movers.sort(key=lambda x: -x["pct"])
+        volatile.sort(key=lambda x: -x["pct"])
+        payload = {
+            "updated": datetime.now(timezone.utc).isoformat(),
+            "scanned": len(by_item),
+            "dips": dips[:15], "movers": movers[:15], "volatile": volatile[:15],
+        }
+        tmp = FLIPS_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(FLIPS_PATH)
+        log.info("Флипы: %s просадок, %s растущих, %s качелей (из %s предметов)",
+                 len(dips), len(movers), len(volatile), len(by_item))
+    except Exception:
+        log.exception("Не смог посчитать флипы")
+
+
+async def bootstrap_market():
+    """При старте: бэкфилл (если базы мало) -> первый расчёт флипов."""
+    try:
+        await backfill_history()
+        await compute_flips()
+    except Exception:
+        log.exception("Бутстрап рынка не удался")
+
+
 async def warm_profiles():
     """Каждый час: опрашиваем привязанных игроков.
 
@@ -781,8 +905,11 @@ async def main():
     scheduler.add_job(refresh_ru_names, "interval", hours=24)
     scheduler.add_job(collect_and_check, "interval", minutes=COLLECT_EVERY_MIN, args=[bot])
     scheduler.add_job(warm_profiles, "interval", minutes=WARM_EVERY_MIN)
+    scheduler.add_job(market_snapshot, "interval", hours=1)
+    scheduler.add_job(db.history_cleanup, "interval", hours=24)
     scheduler.start()
     asyncio.get_running_loop().create_task(refresh_ru_names())
+    asyncio.get_running_loop().create_task(bootstrap_market())
 
     if API_ENABLED:
         from web_api import start_api
