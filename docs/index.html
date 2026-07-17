@@ -655,43 +655,48 @@ function marketHeader() {
 let catFilter = null;
 
 /* ---------- бесконечная прокрутка списка ---------- */
-let _listItems = [], _listShown = 0, _listObserver = null;
+let _listItems = [], _listShown = 0, _scrollRaf = 0;
 const LIST_CHUNK = 30;
 
 function stopInfiniteList() {
-  if (_listObserver) { _listObserver.disconnect(); _listObserver = null; }
+  _listItems = []; _listShown = 0;
 }
 
 function appendListChunk() {
   const listEl = document.getElementById('catlist');
   const moreEl = document.getElementById('catmore');
-  if (!listEl) { stopInfiniteList(); return; }
+  if (!listEl || _listShown >= _listItems.length) return;
   const next = _listItems.slice(_listShown, _listShown + LIST_CHUNK);
   listEl.insertAdjacentHTML('beforeend', next.map(it => rowHtml(it)).join(''));
   fillPrices(next.map(i => i.id), false);
   _listShown += next.length;
   if (moreEl) {
-    if (_listShown < _listItems.length) {
-      moreEl.innerHTML = '<div class="hint" style="padding:10px">Показано ' + _listShown + ' из ' + _listItems.length + ' · листай ниже</div>';
-    } else {
-      stopInfiniteList();
-      moreEl.innerHTML = '<div class="hint" style="padding:10px">Это все ' + _listItems.length + ' предметов</div>';
-    }
+    moreEl.innerHTML = _listShown < _listItems.length
+      ? '<div class="hint" style="padding:10px">Показано ' + _listShown + ' из ' + _listItems.length + ' · листай ниже</div>'
+      : '<div class="hint" style="padding:10px">Это все ' + _listItems.length + ' предметов</div>';
+  }
+}
+
+// грузим куски, пока «хвост» списка близко к низу экрана (синхронно, без rAF)
+function maybeLoadMore() {
+  let guard = 0;
+  while (_listShown < _listItems.length && guard < 60) {
+    const moreEl = document.getElementById('catmore');
+    if (!moreEl || moreEl.getBoundingClientRect().top >= window.innerHeight + 700) break;
+    appendListChunk();
+    guard++;
   }
 }
 
 function startInfiniteList(items) {
-  stopInfiniteList();
   _listItems = items; _listShown = 0;
   appendListChunk();
-  const moreEl = document.getElementById('catmore');
-  if (moreEl && _listShown < _listItems.length) {
-    _listObserver = new IntersectionObserver((entries) => {
-      if (entries.some(e => e.isIntersecting)) appendListChunk();
-    }, {root: view, rootMargin: '400px'});
-    _listObserver.observe(moreEl);
-  }
+  maybeLoadMore();   // заполнить первый экран
 }
+
+// прокрутка может идти и по документу, и по внутреннему контейнеру — слушаем оба
+window.addEventListener('scroll', maybeLoadMore, {passive: true});
+view.addEventListener('scroll', maybeLoadMore, {passive: true});
 
 function renderMarket() {
   stopInfiniteList();
