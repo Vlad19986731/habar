@@ -668,7 +668,7 @@ function renderMarket() {
       '<div class="label sect">Найдено · ' + results.length + '</div>' +
       '<div class="list">' + results.map(it => rowHtml(it)).join('') + '</div>';
     bindSearch(); updWipe();
-    fillPrices(results.slice(0,8).map(i=>i.id), false);
+    fillPrices(results.map(i=>i.id), false);
     return;
   }
   if (results && !results.length) {
@@ -686,7 +686,7 @@ function renderMarket() {
       '<div class="list" style="margin-top:10px">' + items.slice(0,30).map(it => rowHtml(it)).join('') + '</div>' +
       (items.length > 30 ? '<div class="hint">Показаны первые 30 — сузь поиском</div>' : '');
     bindSearch(); updWipe();
-    fillPrices(items.slice(0,8).map(i=>i.id), false);
+    fillPrices(items.slice(0,30).map(i=>i.id), false);
     return;
   }
   // главная рынка: статистика + категории
