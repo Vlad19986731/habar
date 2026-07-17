@@ -33,10 +33,11 @@
 
   .app{
     max-width:480px; margin:0 auto; min-height:100vh; min-height:100dvh;
+    position:relative; overflow:hidden;
     display:flex; flex-direction:column; background:var(--app);
     border-left:1px solid var(--edge); border-right:1px solid var(--edge);
   }
-  main{flex:1; overflow-y:auto; min-height:0; padding:14px 16px calc(84px + env(safe-area-inset-bottom))}
+  main{flex:1; overflow-y:auto; min-height:0; padding:14px 16px calc(22px + env(safe-area-inset-bottom))}
   main.fade{animation:hfade .35s ease-out both}
 
   /* ---------- фирменные элементы (Delta Force HUD) ---------- */
@@ -303,47 +304,69 @@
   .prem p{color:#c8ccd2; font-size:12.5px; line-height:1.65; margin-top:8px}
 
   /* ---------- таб-бар ---------- */
-  nav{
-    position:fixed; bottom:0; left:50%; transform:translateX(-50%);
-    width:100%; max-width:480px; display:flex; background:var(--tabbar);
-    border-top:1px solid var(--tab-b);
-    padding:4px 4px calc(8px + env(safe-area-inset-bottom, 8px));
+  /* ---------- боковое меню (выезжающая панель) ---------- */
+  #navgrip{
+    position:absolute; right:0; top:50%; transform:translateY(-50%); z-index:40;
+    width:20px; height:58px; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:5px; background:none; border:none; cursor:pointer;
+    opacity:.5; transition:opacity .2s; padding:0;
   }
-  .tab{
-    flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
-    padding:8px 0 4px; min-height:44px; cursor:pointer; color:var(--text3);
-    background:none; border:none; font-family:inherit;
+  #navgrip span{width:4px; height:4px; border-radius:50%; background:var(--orange)}
+  #navgrip:active{opacity:1}
+  .app.navopen #navgrip{opacity:0; pointer-events:none}
+  #navbd{
+    position:absolute; inset:0; z-index:41; background:rgba(2,6,10,.5);
+    opacity:0; pointer-events:none; transition:opacity .25s;
   }
-  .tab svg{width:20px; height:20px}
-  .tab div{font-size:10px; font-weight:700}
-  .tab.on{color:var(--orange)}
+  .app.navopen #navbd{opacity:1; pointer-events:auto}
+  #navdrw{
+    position:absolute; top:0; right:0; height:100%; width:74%; max-width:320px; z-index:42;
+    background:rgba(9,17,24,.9); border-left:1px solid rgba(15,247,150,.3);
+    transform:translateX(100%); transition:transform .3s cubic-bezier(.25,.85,.4,1);
+    display:flex; flex-direction:column; gap:2px;
+    padding:calc(20px + env(safe-area-inset-top)) 0 20px;
+  }
+  .app.navopen #navdrw{transform:none}
+  .navitem{display:flex; align-items:center; gap:12px; width:100%; cursor:pointer;
+    background:none; border:none; font-family:inherit; color:#c3ccd1; text-align:left}
+  .navitem svg{fill:currentColor; flex:none}
+  .navitem .nl{font-weight:600}
+  .navitem.sec{padding:9px 20px; opacity:.55}
+  .navitem.sec svg{width:17px; height:17px}
+  .navitem.sec .nl{font-size:12.5px}
+  .navitem.big{padding:13px 20px}
+  .navitem.big .ni{width:32px; height:32px; border-radius:9px; flex:none;
+    background:rgba(15,247,150,.1); display:flex; align-items:center; justify-content:center}
+  .navitem.big .ni svg{width:18px; height:18px}
+  .navitem.big .nl{font-size:14px}
+  .navitem.on{color:var(--orange); opacity:1}
+  .navitem.big.on .ni{background:rgba(15,247,150,.2)}
+  .navdiv{height:1px; background:var(--divider); margin:8px 20px}
 </style>
 </head>
 <body>
 <div class="app">
   <main id="view"></main>
-  <nav id="tabs">
-    <button class="tab on" data-tab="home">
-      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2 2 9h2v8h4.5v-5h3v5H16V9h2z"/></svg>
-      <div>Главная</div>
+  <button id="navgrip" aria-label="Открыть меню"><span></span><span></span><span></span></button>
+  <div id="navbd"></div>
+  <aside id="navdrw">
+    <button class="navitem sec on" data-tab="home">
+      <svg viewBox="0 0 20 20"><path d="M10 2 2 9h2v8h4.5v-5h3v5H16V9h2z"/></svg><span class="nl">Главная</span>
     </button>
-    <button class="tab" data-tab="market">
-      <svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="10" width="3.5" height="8"/><rect x="8.25" y="4" width="3.5" height="14"/><rect x="14.5" y="7" width="3.5" height="11"/></svg>
-      <div>Рынок</div>
+    <button class="navitem sec" data-tab="more">
+      <svg viewBox="0 0 20 20"><circle cx="10" cy="6.5" r="3.2"/><path d="M3.5 17c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6z"/></svg><span class="nl">Профиль</span>
     </button>
-    <button class="tab" data-tab="flips">
-      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm.9 12.3v.9a.7.7 0 01-1.4 0v-.85c-1.2-.16-2.2-.83-2.4-1.9a.7.7 0 011.36-.32c.13.55.75.95 1.68.95.9 0 1.5-.4 1.5-.95 0-.5-.4-.78-1.6-1.05-1.35-.3-2.7-.78-2.7-2.2 0-.98.78-1.73 1.96-1.94V6.3a.7.7 0 011.4 0v.86c1.05.19 1.83.79 2.1 1.7a.7.7 0 01-1.34.4c-.15-.5-.68-.85-1.46-.85-.85 0-1.36.38-1.36.83 0 .48.45.7 1.66.98 1.3.29 2.64.8 2.64 2.28 0 1.03-.8 1.8-2.04 2z"/></svg>
-      <div>Выгода</div>
+    <div class="navdiv"></div>
+    <button class="navitem big" data-tab="market">
+      <span class="ni"><svg viewBox="0 0 20 20"><rect x="2" y="10" width="3.5" height="8"/><rect x="8.25" y="4" width="3.5" height="14"/><rect x="14.5" y="7" width="3.5" height="11"/></svg></span><span class="nl">Рынок</span>
     </button>
-    <button class="tab" data-tab="stash">
-      <svg viewBox="0 0 20 20" fill="currentColor"><polygon points="10,1.5 12.6,7 18.5,7.8 14.2,11.9 15.2,17.7 10,14.9 4.8,17.7 5.8,11.9 1.5,7.8 7.4,7"/></svg>
-      <div>Избранное</div>
+    <button class="navitem big" data-tab="flips">
+      <span class="ni"><svg viewBox="0 0 20 20"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm.9 12.3v.9a.7.7 0 01-1.4 0v-.85c-1.2-.16-2.2-.83-2.4-1.9a.7.7 0 011.36-.32c.13.55.75.95 1.68.95.9 0 1.5-.4 1.5-.95 0-.5-.4-.78-1.6-1.05-1.35-.3-2.7-.78-2.7-2.2 0-.98.78-1.73 1.96-1.94V6.3a.7.7 0 011.4 0v.86c1.05.19 1.83.79 2.1 1.7a.7.7 0 01-1.34.4c-.15-.5-.68-.85-1.46-.85-.85 0-1.36.38-1.36.83 0 .48.45.7 1.66.98 1.3.29 2.64.8 2.64 2.28 0 1.03-.8 1.8-2.04 2z"/></svg></span><span class="nl">Выгода</span>
     </button>
-    <button class="tab" data-tab="more">
-      <svg viewBox="0 0 20 20" fill="currentColor"><circle cx="10" cy="6.5" r="3.2"/><path d="M3.5 17c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6z"/></svg>
-      <div>Профиль</div>
+    <button class="navitem big" data-tab="stash">
+      <span class="ni"><svg viewBox="0 0 20 20"><polygon points="10,1.5 12.6,7 18.5,7.8 14.2,11.9 15.2,17.7 10,14.9 4.8,17.7 5.8,11.9 1.5,7.8 7.4,7"/></svg></span><span class="nl">Избранное</span>
     </button>
-  </nav>
+  </aside>
 </div>
 
 <script>
@@ -1597,10 +1620,16 @@ async function handleRemoveFav(id) {
   renderStash();
 }
 
-document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
-  document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+const appEl = document.querySelector('.app');
+const openNav = () => appEl.classList.add('navopen');
+const closeNav = () => appEl.classList.remove('navopen');
+document.getElementById('navgrip').onclick = openNav;
+document.getElementById('navbd').onclick = closeNav;
+document.querySelectorAll('.navitem').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.navitem').forEach(x => x.classList.remove('on'));
   b.classList.add('on');
   tab = b.dataset.tab;
+  closeNav();
   stopInfiniteList();
   view.classList.remove('fade'); void view.offsetWidth; view.classList.add('fade');
   if (tab === 'home') renderHome();
@@ -1622,7 +1651,7 @@ function tabFromHash() {
   return 'home';
 }
 function markActiveTab() {
-  document.querySelectorAll('.tab').forEach(x =>
+  document.querySelectorAll('.navitem').forEach(x =>
     x.classList.toggle('on', x.dataset.tab === tab));
 }
 
