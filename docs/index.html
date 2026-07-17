@@ -1032,18 +1032,35 @@ async function loadProfileData(prof) {
   box.innerHTML = html;
 }
 
+function tgUser() {
+  try { return (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || null; } catch(e) { return null; }
+}
+
 function renderMore() {
   const prof = profGet();
-  const head = prof
-    ? '<div style="display:flex;align-items:center;gap:12px">' +
-      '<div style="width:48px;height:48px;background:var(--well);border:1px solid var(--orange);display:flex;align-items:center;justify-content:center;color:var(--orange);font-size:13px;font-weight:800;font-family:var(--mono);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)">ОП</div>' +
-      '<div style="flex:1;min-width:0"><div style="color:var(--text);font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(prof.name) + '</div>' +
-      '<div style="color:var(--text3);font-size:9.5px;font-family:var(--mono);letter-spacing:.06em;margin-top:2px">УР. ' + (prof.lvl || 1) + ' · ID ' + esc(String(prof.dfid || '—')) + '</div></div>' +
-      '<button class="langbtn" id="dfunlink">ОТВЯЗАТЬ</button></div>'
-    : '<div style="display:flex;align-items:center;gap:12px">' +
-      '<div style="width:48px;height:48px;background:var(--well);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;font-weight:800;font-family:var(--mono);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)">ОП</div>' +
-      '<div><div style="color:var(--text);font-size:17px;font-weight:800">Оператор</div>' +
-      '<div style="color:var(--text2);font-size:11.5px;font-weight:600;margin-top:2px">не привязан</div></div></div>';
+  const u = tgUser();
+
+  // Telegram-аккаунт: регистрация в ноль тапов — Telegram сам говорит, кто ты
+  const tgName = u ? [u.first_name, u.last_name].filter(Boolean).join(' ') : 'Оператор';
+  const tgSub = u
+    ? '<span style="color:var(--green)">✓ вход через Telegram</span>' + (u.username ? ' · @' + esc(u.username) : '')
+    : 'открой через Telegram для входа';
+  const ava = (u && u.photo_url)
+    ? '<img src="' + u.photo_url + '" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()">'
+    : '<span style="color:var(--orange);font-size:16px;font-weight:800;font-family:var(--mono)">' + esc((tgName[0] || 'О').toUpperCase()) + '</span>';
+  const head =
+    '<div style="display:flex;align-items:center;gap:12px">' +
+    '<div style="width:48px;height:48px;background:var(--well);border:1px solid ' + (u ? 'var(--orange)' : 'var(--border)') + ';display:flex;align-items:center;justify-content:center;overflow:hidden;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)">' + ava + '</div>' +
+    '<div style="flex:1;min-width:0"><div style="color:var(--text);font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(tgName) + '</div>' +
+    '<div style="color:var(--text2);font-size:11px;font-weight:600;margin-top:2px">' + tgSub + '</div></div>' +
+    (prof ? '<button class="langbtn" id="dfunlink">ОТВЯЗАТЬ ИГРУ</button>' : '') +
+    '</div>' +
+    (prof
+      ? '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 11px;background:var(--well);border:1px solid var(--border);clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)">' +
+        '<span style="color:var(--orange);font-size:10px;font-weight:800;font-family:var(--mono)">DF</span>' +
+        '<span style="color:var(--text);font-size:12.5px;font-weight:700;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(prof.name) + '</span>' +
+        '<span style="color:var(--text3);font-size:9px;font-family:var(--mono)">УР. ' + (prof.lvl || 1) + '</span></div>'
+      : '');
 
   const profileCard = prof
     ? '<div class="card cut" style="margin-top:16px"><div class="strip"></div>' +
