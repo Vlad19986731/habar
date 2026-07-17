@@ -26,7 +26,8 @@ import api
 import db
 from aliases import normalize_query
 from config import (ADMIN_IDS, API_ENABLED, API_POLITE_DELAY, BOT_TOKEN,
-                    COLLECT_EVERY_MIN, NEWS_GIT_PUSH, WARM_EVERY_MIN, WEB_DIR)
+                    COLLECT_EVERY_MIN, DATA_DIR, NEWS_GIT_PUSH, WARM_EVERY_MIN,
+                    WEB_DIR)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("dfbot")
@@ -495,12 +496,17 @@ def publish(rel_path: str, commit_msg: str) -> None:
 
 
 TG_NEWS_URL = "https://t.me/s/deltaforce_ru"
-TR_CACHE_PATH = REPO_DIR / "trcache.json"
+# кэш переводов лежит рядом с базой (папка с кодом на сервере read-only)
+TR_CACHE_PATH = DATA_DIR / "trcache.json"
 _tr_cache: dict | None = None
 
 
 async def _translate_en_ru(text: str) -> str:
-    """Перевод заголовка en->ru через публичный gtx-эндпоинт, с кэшем на диске."""
+    """Перевод en->ru через публичный gtx-эндпоинт, с кэшем на диске.
+
+    Сбой записи кэша НЕ должен терять готовый перевод — кэш это ускорение,
+    а не источник данных.
+    """
     global _tr_cache
     if _tr_cache is None:
         try:
@@ -509,6 +515,8 @@ async def _translate_en_ru(text: str) -> str:
             _tr_cache = {}
     if text in _tr_cache:
         return _tr_cache[text]
+
+    out = ""
     try:
         r = await api._client.get(
             "https://translate.googleapis.com/translate_a/single",
@@ -516,13 +524,18 @@ async def _translate_en_ru(text: str) -> str:
         )
         r.raise_for_status()
         out = "".join(seg[0] for seg in r.json()[0] if seg and seg[0]).strip()
-        if out:
-            _tr_cache[text] = out
-            TR_CACHE_PATH.write_text(json.dumps(_tr_cache, ensure_ascii=False), encoding="utf-8")
-            return out
     except Exception:
-        pass
-    return text
+        log.warning("Перевод не удался, оставляю оригинал: %s", text[:40])
+        return text
+
+    if not out:
+        return text
+    _tr_cache[text] = out
+    try:
+        TR_CACHE_PATH.write_text(json.dumps(_tr_cache, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        log.warning("Не смог сохранить кэш переводов в %s (перевод не потерян)", TR_CACHE_PATH)
+    return out
 
 
 _IMG_RE = re.compile(r"(\{STEAM_CLAN_IMAGE\}[^\s\]\[\"'<>]+|https?://[^\s\]\[\"'<>]+?\.(?:jpg|jpeg|png|gif))")
