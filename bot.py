@@ -19,7 +19,7 @@ from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (CallbackQuery, InlineKeyboardButton,
-                           InlineKeyboardMarkup, Message)
+                           InlineKeyboardMarkup, Message, WebAppInfo)
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import api
@@ -35,6 +35,7 @@ log = logging.getLogger("dfbot")
 router = Router()
 
 BARS = "▁▂▃▄▅▆▇█"
+APP_URL = "https://habargg.ru/"
 
 
 class TrackUserMiddleware(BaseMiddleware):
@@ -220,18 +221,23 @@ async def cmd_start(m: Message, command: CommandObject):
                     return
             await send_alert_presets(m, m.from_user.id, item_id, direction)
             return
-    n = await db.items_count()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📱 Открыть приложение", web_app=WebAppInfo(url=APP_URL))],
+        [InlineKeyboardButton(text="🔍 Как найти цену", callback_data="howto"),
+         InlineKeyboardButton(text="⏳ До вайпа", callback_data="wipebtn")],
+    ])
     await m.answer(
-        "🎯 <b>Хабар</b> — цены аукциона Delta Force прямо в Telegram.\n\n"
-        "Просто напиши название предмета (можно по-русски):\n"
-        "<code>вектор</code>, <code>дигл</code>, <code>gold ammo</code>, <code>helmet</code>\n\n"
-        "Команды:\n"
-        "/watch — избранное\n"
-        "/alerts — уведомления о ценах\n"
-        "/wipe — сколько до вайпа\n"
-        "/clear — очистить чат\n\n"
-        "<i>Чат сам себя чистит: при новом поиске прошлая карточка убирается.</i>\n"
-        f"<i>В базе {n} предметов · данные: deltaforceapi.com</i>"
+        "🎯 <b>ХАБАР</b> — твой штаб по Delta Force\n\n"
+        "Не просто цены — здесь всё для оператора:\n\n"
+        "💰 Цены аукциона в реальном времени + где выгодно купить и продать\n"
+        "📰 Новости и патчи игры — на русском\n"
+        "⏳ Таймер до вайпа сезона\n"
+        "🎒 Стоимость твоего инвентаря и статистика\n"
+        "🔔 Слежка за ценами — сообщим, когда предмет подешевеет\n\n"
+        "И это только старт — дальше больше 🚀\n\n"
+        "<i>Просто напиши название предмета (можно по-русски: «вектор», «дигл», «шлем») "
+        "или жми кнопку ниже 👇</i>",
+        reply_markup=kb,
     )
 
 
@@ -484,6 +490,34 @@ async def cb_alcust(c: CallbackQuery, state: FSMContext):
         f"Сообщу, когда <b>{item[1]}</b> {word}."
     )
     await c.answer()
+
+
+@router.callback_query(F.data == "howto")
+async def cb_howto(c: CallbackQuery):
+    await c.answer(
+        "🔍 Просто напиши название предмета — можно по-русски:\n\n"
+        "«вектор», «дигл», «шлем», «gold»\n\n"
+        "Получишь цену, график за 7 дней и сможешь поставить слежку. "
+        "А в приложении — весь рынок, выгода и новости.",
+        show_alert=True,
+    )
+
+
+@router.callback_query(F.data == "wipebtn")
+async def cb_wipebtn(c: CallbackQuery):
+    season = await api.get_current_season()
+    if not season:
+        await c.answer("Не удалось получить данные сезона 😕", show_alert=True)
+        return
+    end = datetime.fromisoformat(season["endedAt"].replace("Z", "+00:00"))
+    left = (end - datetime.now(timezone.utc)).days
+    await c.answer(
+        f"⏳ Сезон {season.get('number')} «{season.get('name')}»\n\n"
+        f"До вайпа: {left} дн. ({end.strftime('%d.%m.%Y')})\n\n"
+        f"Перед вайпом гир дешевеет — все распродаются. "
+        f"После вайпа дорожают материалы и базовый гир.",
+        show_alert=True,
+    )
 
 
 @router.callback_query(F.data == "dismiss")
