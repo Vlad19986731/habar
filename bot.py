@@ -228,7 +228,9 @@ async def cmd_start(m: Message, command: CommandObject):
         "Команды:\n"
         "/watch — избранное\n"
         "/alerts — уведомления о ценах\n"
-        "/wipe — сколько до вайпа\n\n"
+        "/wipe — сколько до вайпа\n"
+        "/clear — очистить чат\n\n"
+        "<i>Чат сам себя чистит: при новом поиске прошлая карточка убирается.</i>\n"
         f"<i>В базе {n} предметов · данные: deltaforceapi.com</i>"
     )
 
@@ -257,6 +259,16 @@ async def cmd_stats(m: Message):
         game = f" · 🎮 {df_name}" if df_name else ""
         lines.append(f"• {who} — {seen or '—'} <i>({cnt} действий)</i>{game}")
     await m.answer("\n".join(lines))
+
+
+@router.message(Command("clear"))
+async def cmd_clear(m: Message):
+    """Убрать последнюю карточку из чата вручную."""
+    await sweep_ephemeral(m.bot, m.chat.id)
+    try:
+        await m.delete()
+    except Exception:
+        pass
 
 
 @router.message(Command("wipe"))
@@ -327,31 +339,51 @@ async def alert_threshold(m: Message, state: FSMContext):
     )
 
 
+# «одно активное сообщение»: чат не засоряется карточками.
+# При новом запросе удаляем прошлую карточку и прошлый запрос пользователя.
+_ephemeral: dict[int, list[int]] = {}
+
+
+async def sweep_ephemeral(bot: Bot, chat_id: int) -> None:
+    for mid in _ephemeral.pop(chat_id, []):
+        try:
+            await bot.delete_message(chat_id, mid)
+        except Exception:
+            pass
+
+
+def remember_ephemeral(chat_id: int, *msg_ids) -> None:
+    _ephemeral[chat_id] = [m for m in msg_ids if m]
+
+
 @router.message(F.text & ~F.text.startswith("/"))
 async def search(m: Message):
-    await db.upsert_user(m.from_user.id, m.from_user.username)
+    await sweep_ephemeral(m.bot, m.chat.id)   # убрать прошлую карточку + запрос
     results = []
     for variant in normalize_query(m.text):
         results = await db.search_items(variant)
         if results:
             break
     if not results:
-        await m.answer(
+        sent = await m.answer(
             "Не нашёл 😕 Попробуй по-английски или короче: "
             "<code>vector</code>, <code>helmet</code>, <code>gold</code>\n\n"
             "<i>Если предмет точно есть — напиши как ты его искал, добавим алиас.</i>"
         )
+        remember_ephemeral(m.chat.id, m.message_id, sent.message_id)
         return
     if len(results) == 1:
         item_id, name = results[0]
         text, _ = await build_card(item_id, name)
         watched = await db.is_watched(m.from_user.id, item_id)
         alert = await db.alert_active_for_item(m.from_user.id, item_id)
-        await m.answer(text, reply_markup=card_kb(item_id, watched, alert))
+        sent = await m.answer(text, reply_markup=card_kb(item_id, watched, alert))
+        remember_ephemeral(m.chat.id, m.message_id, sent.message_id)
         return
     kb = [[InlineKeyboardButton(text=name, callback_data=f"card:{item_id}")]
           for item_id, name in results]
-    await m.answer("Уточни, что именно:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    sent = await m.answer("Уточни, что именно:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    remember_ephemeral(m.chat.id, m.message_id, sent.message_id)
 
 
 # ---------- callbacks ----------
