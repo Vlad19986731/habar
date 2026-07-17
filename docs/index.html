@@ -567,8 +567,48 @@ function rowHtml(it, removable) {
     rm + '</button>';
 }
 
-async function fillPrices(ids, withTrend) {
+// прайс-лист всего рынка с сервера: цены у ВСЕХ предметов сразу
+let PRICES = null;
+async function loadPrices() {
+  try {
+    const c = JSON.parse(localStorage.getItem('prices_v1') || 'null');
+    if (c && Date.now() - c.ts < 20 * 60e3) { PRICES = c.map; }
+  } catch(e){}
+  try {
+    const r = await fetchT('prices.json?_=' + Date.now(), 12000);
+    PRICES = await r.json();
+    localStorage.setItem('prices_v1', JSON.stringify({ts: Date.now(), map: PRICES}));
+  } catch(e){ if (!PRICES) PRICES = {}; }
+}
+
+function paintFromPrices(ids) {
+  if (!PRICES) return [];
+  const missing = [];
   for (const id of ids) {
+    const rec = PRICES[id];
+    const pEl = document.getElementById('p-' + id);
+    if (!pEl) continue;
+    if (!rec) { missing.push(id); continue; }
+    pEl.textContent = fmt(rec[0]) + ' ₮';
+    const subEl = document.getElementById('sub-' + id);
+    if (subEl) subEl.textContent = rec[1] ? 'РЕФ ' + fmt(rec[1]) : 'аукцион';
+    const dEl = document.getElementById('d-' + id);
+    if (dEl && rec[2] != null) {
+      const ch = rec[2], hex = ch >= 0 ? '#4CAF7D' : '#E05252';
+      dEl.textContent = (ch >= 0 ? '▲ +' : '▼ ') + Math.abs(ch).toFixed(1) + '%';
+      dEl.style.color = hex;
+      const rowEl = dEl.closest('.row'), wellEl = rowEl && rowEl.querySelector('.well');
+      if (wellEl) wellEl.style.borderLeftColor = hex;
+    }
+  }
+  return missing;
+}
+
+async function fillPrices(ids, withTrend) {
+  // мгновенно из серверного прайс-листа — цены у всех
+  const missing = paintFromPrices(ids);
+  // чего нет в снимке (новые предметы) — догружаем с API, но немного
+  for (const id of missing.slice(0, 8)) {
     if (!document.getElementById('p-' + id)) return; // экран сменился
     try {
       const d = await api('GetAuctionItemPrice', {auctionItemId:id});
@@ -1340,6 +1380,7 @@ function markActiveTab() {
     }
     setInterval(() => { srv('/ping', {}).catch(()=>{}); }, 60000);
   }, 1200);
+  loadPrices();
   try { await loadCatalog(); } catch(e) { catError = true; }
   if (tab === 'market') renderMarket();
 })();

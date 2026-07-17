@@ -787,22 +787,53 @@ async def backfill_history():
     log.info("Бэкфилл готов: %s точек истории", total)
 
 
+PRICES_PATH = WEB_DIR / "prices.json"
+
+
+async def write_prices_json(refs: dict):
+    """Прайс-лист всего рынка для приложения: {id: [price, ref, ch24]}.
+
+    Приложение грузит его одним файлом — цены у ВСЕХ предметов сразу,
+    без 30 запросов к чужому API.
+    """
+    try:
+        rows = await db.history_rows_7d()
+        by_item: dict[str, list[float]] = {}
+        for item_id, _ts, price in rows:
+            by_item.setdefault(item_id, []).append(price)
+        out = {}
+        for item_id, pts in by_item.items():
+            price = pts[-1]
+            ch24 = None
+            if len(pts) >= 25 and pts[-25]:
+                ch24 = round((price - pts[-25]) / pts[-25] * 100, 1)
+            out[item_id] = [int(price), int(refs.get(item_id) or 0), ch24]
+        tmp = PRICES_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(PRICES_PATH)
+        log.info("Прайс-лист: %s предметов", len(out))
+    except Exception:
+        log.exception("Не смог записать прайс-лист")
+
+
 async def market_snapshot():
     """Каждый час: снимок цен ВСЕХ предметов в нашу базу."""
     ids = await db.all_item_ids()
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
-    rows, fails = [], 0
+    rows, refs, fails = [], {}, 0
     for item_id in ids:
         try:
             p = await api.get_price(item_id)
             if p and p.get("price"):
                 rows.append((item_id, now, p["price"]))
+                refs[item_id] = p.get("referencePrice")
         except Exception:
             fails += 1
         await asyncio.sleep(0.1)
     if rows:
         await db.history_add_many(rows)
     log.info("Снимок рынка: %s цен (%s ошибок)", len(rows), fails)
+    await write_prices_json(refs)
     await compute_flips()
 
 
@@ -879,9 +910,11 @@ async def compute_flips():
 
 
 async def bootstrap_market():
-    """При старте: бэкфилл (если базы мало) -> первый расчёт флипов."""
+    """При старте: бэкфилл (если базы мало) -> прайс-лист -> флипы."""
     try:
         await backfill_history()
+        if not PRICES_PATH.exists():
+            await write_prices_json({})   # ref подтянется при первом снимке
         await compute_flips()
     except Exception:
         log.exception("Бутстрап рынка не удался")
