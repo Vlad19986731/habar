@@ -857,6 +857,27 @@ async function openItem(id) {
   if (dev <= -5) { sigBg='var(--green-bg)'; sigC='var(--green)'; sigDot='var(--green)'; sigTxt='Ниже средней 7д на ' + Math.abs(dev).toFixed(0) + '% — точка входа'; }
   else if (dev >= 5) { sigBg='var(--red-bg)'; sigC='var(--red)'; sigDot='var(--red)'; sigTxt='Выше средней 7д на ' + dev.toFixed(0) + '% — дорого'; }
 
+  // --- Вердикт «вендор или аукцион» (v1) ---
+  // Выкуп вендора принимаем ≈ referencePrice (статичная базовая цена из API).
+  // Если в игре окажется, что вендор = доля от базы — поменяй только VENDOR_K.
+  const VENDOR_K = 1;
+  const AUCTION_FEE = 0.15;                 // номинально; у дорогих лотов реально бывает выше
+  const refP = p.referencePrice || 0;
+  const vendor = Math.round(refP * VENDOR_K);
+  const net = Math.round(price * (1 - AUCTION_FEE));
+  let dealBlock = '';
+  if (vendor > 0 && price > 0) {
+    const diff = net - vendor, better = diff > 0;
+    dealBlock =
+      '<div class="signal" style="background:var(--divider);margin-top:8px;flex-direction:column;align-items:stretch;gap:5px">' +
+        '<div style="display:flex;justify-content:space-between;width:100%"><span style="color:var(--text2)">🏪 Вендору ≈</span><b>' + fmt(vendor) + ' ₮</b></div>' +
+        '<div style="display:flex;justify-content:space-between;width:100%"><span style="color:var(--text2)">📈 Аукцион, чистыми*</span><b>' + fmt(net) + ' ₮</b></div>' +
+        '<b style="text-align:center;color:var(--' + (better ? 'green' : 'text2') + ')">' +
+          (better ? '→ Аукцион выгоднее на +' + fmt(diff) + ' ₮' : '→ Проще сдать вендору') + '</b>' +
+        '<span style="color:var(--text2);font-size:11px;text-align:center;line-height:1.3">* комиссия ≈15%; красную редкость на аукцион нельзя</span>' +
+      '</div>';
+  }
+
 
   const wl = await wlGet();
   const inWl = wl.includes(id);
@@ -886,6 +907,7 @@ async function openItem(id) {
     chartSvg(avgs) +
     '<div class="chart-meta"><span>' + (p.referencePrice ? 'РЕФ. ЦЕНА ' + fmt(p.referencePrice) : '') + '</span><span>7 ДНЕЙ</span></div>' +
     '<div class="signal" style="background:' + sigBg + '"><i style="background:' + sigDot + '"></i><b style="color:' + sigC + '">' + sigTxt + '</b></div>' +
+    dealBlock +
     '<div class="btns">' +
       '<button class="btn ' + (inWl?'fill':'') + '" id="wlbtn">' + (inWl ? '✓ В избранном' : '⭐ В избранное') + '</button>' +
     '</div>' +
