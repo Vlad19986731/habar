@@ -876,7 +876,7 @@ async def write_prices_json(refs: dict):
         log.exception("Не смог записать прайс-лист")
 
 
-async def market_snapshot():
+async def market_snapshot(bot: Bot = None):
     """Каждый час: снимок цен ВСЕХ предметов в нашу базу."""
     ids = await db.all_item_ids()
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
@@ -895,6 +895,8 @@ async def market_snapshot():
     log.info("Снимок рынка: %s цен (%s ошибок)", len(rows), fails)
     await write_prices_json(refs)
     await compute_flips()
+    if bot:
+        await check_hot_deals(bot)
 
 
 def _spark(pts: list[float], n: int = 16) -> list[int]:
@@ -1143,6 +1145,12 @@ async def send_daily_digest(bot: Bot):
         [InlineKeyboardButton(text="💰 Открыть Выгоду", web_app=WebAppInfo(url=APP_URL + "#flips"))],
         [InlineKeyboardButton(text="🔕 Отписаться", callback_data="digest_off")],
     ])
+    sent = await _broadcast(bot, text, kb)
+    log.info("Дайджест разослан: %s (просадок %s, растущих %s)", sent, n_dips, n_movers)
+
+
+async def _broadcast(bot: Bot, text: str, kb) -> int:
+    """Рассылает сообщение всем подписчикам; помечает заблокировавших бота."""
     recipients = await db.digest_recipients()
     sent = 0
     for tg_id in recipients:
@@ -1153,12 +1161,66 @@ async def send_daily_digest(bot: Bot):
             low = str(e).lower()
             if "bot was blocked" in low or "user is deactivated" in low:
                 await db.mark_blocked(tg_id)
-                log.info("Дайджест: %s заблокировал бота", tg_id)
             else:
-                log.exception("Дайджест: не отправил tg_id=%s", tg_id)
+                log.exception("Рассылка: не отправил tg_id=%s", tg_id)
         await asyncio.sleep(0.05)
-    log.info("Дайджест разослан: %s из %s (просадок %s, растущих %s)",
-             sent, len(recipients), n_dips, n_movers)
+    return sent
+
+
+# «Горячая выгода» — real-time алерт об исключительной просадке
+HOT_MIN_MARGIN = 50000          # навар от N ₮ — только реально жирные сделки
+HOT_MAX_PER_DAY = 3             # не больше N горячих в день (анти-спам)
+HOT_QUIET_UTC = {20, 21, 22, 23, 0, 1, 2, 3, 4}   # 23:00–08:00 МСК — тихо, не будим
+_hot_seen: set = set()          # id предметов, уже разосланных сегодня (память процесса)
+_hot_day = None
+_hot_count = 0
+
+
+async def check_hot_deals(bot: Bot):
+    """После часового пересчёта рынка: исключительная просадка — шлём сразу.
+
+    Состояние в памяти процесса (сбрасывается при рестарте — это ок, рестарт редок).
+    """
+    global _hot_day, _hot_count
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    if _hot_day != today:                  # новый день — сброс счётчиков
+        _hot_day, _hot_count = today, 0
+        _hot_seen.clear()
+    if now.hour in HOT_QUIET_UTC:          # ночь по МСК — молчим
+        return
+    if _hot_count >= HOT_MAX_PER_DAY:      # дневной лимит исчерпан
+        return
+    try:
+        data = json.loads(FLIPS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    fresh = [d for d in data.get("dips", [])
+             if d.get("margin", 0) >= HOT_MIN_MARGIN and d["id"] not in _hot_seen]
+    if not fresh:
+        return
+    deal = max(fresh, key=lambda x: x["margin"])   # одна, самая жирная за проход
+    _hot_seen.add(deal["id"])
+    _hot_count += 1
+
+    ru = _load_ru_names()
+    nm = ru.get(deal["id"])
+    if not nm:
+        it = await db.get_item(deal["id"])
+        nm = it[1] if it else "предмет"
+    nm = html_mod.escape(nm)
+    text = (f"🔥🔥 <b>ГОРЯЧАЯ ВЫГОДА — успей!</b>\n\n"
+            f"<b>{nm}</b>\n"
+            f"Сейчас {fmt(deal['price'])} ₮ · обычно ~{fmt(deal.get('avg', 0))}\n"
+            f"💰 Навар <b>+{fmt(deal['margin'])} ₮</b> после комиссии\n\n"
+            f"<i>Успей забрать, пока не откупили</i>")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💰 Открыть Выгоду", web_app=WebAppInfo(url=APP_URL + "#flips"))],
+        [InlineKeyboardButton(text="🔕 Отписаться", callback_data="digest_off")],
+    ])
+    sent = await _broadcast(bot, text, kb)
+    log.info("Горячая выгода: %s (навар +%s) — %s получателей, за день %s/%s",
+             nm, deal["margin"], sent, _hot_count, HOT_MAX_PER_DAY)
 
 
 # ---------- main ----------
@@ -1187,7 +1249,7 @@ async def main():
     scheduler.add_job(collect_and_check, "interval", minutes=COLLECT_EVERY_MIN, args=[bot])
     scheduler.add_job(warm_profiles, "interval", minutes=WARM_EVERY_MIN)
     scheduler.add_job(credit_referrals, "interval", minutes=30, args=[bot])
-    scheduler.add_job(market_snapshot, "interval", hours=1)
+    scheduler.add_job(market_snapshot, "interval", hours=1, args=[bot])
     scheduler.add_job(db.history_cleanup, "interval", hours=24)
     scheduler.add_job(send_daily_digest, "cron", hour=16, minute=0, args=[bot])  # 19:00 МСК
     scheduler.start()
