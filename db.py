@@ -68,6 +68,7 @@ _USER_COLUMNS = [
     ("ref_by", "INTEGER"),         # кто пригласил (tg_id), NULL если сам
     ("ref_credited", "INTEGER DEFAULT 0"), # засчитан ли этот юзер пригласившему (антифрод)
     ("ref_count", "INTEGER DEFAULT 0"),    # сколько активных друзей привёл
+    ("digest_off", "INTEGER DEFAULT 0"),   # отписался от ежедневного дайджеста «Выгода дня»
 ]
 
 
@@ -110,6 +111,30 @@ async def mark_blocked(tg_id: int) -> None:
     """Пользователь заблокировал бота — не шлём ему пуши."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("UPDATE users SET blocked=1 WHERE tg_id=?", (tg_id,))
+        await db.commit()
+
+
+# ---------- дайджест «Выгода дня» ----------
+
+async def digest_recipients() -> list[int]:
+    """Кому шлём дайджест: не заблокировали бота, не отписались, активны за 30 дней."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT tg_id FROM users WHERE blocked=0 AND COALESCE(digest_off,0)=0 "
+            "AND last_seen > datetime('now','-30 days')")
+        return [r[0] for r in await cur.fetchall()]
+
+
+async def get_digest_off(tg_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT COALESCE(digest_off,0) FROM users WHERE tg_id=?", (tg_id,))
+        row = await cur.fetchone()
+        return bool(row[0]) if row else False
+
+
+async def set_digest_off(tg_id: int, off: bool) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE users SET digest_off=? WHERE tg_id=?", (1 if off else 0, tg_id))
         await db.commit()
 
 

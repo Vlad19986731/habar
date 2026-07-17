@@ -1613,11 +1613,12 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
 /* ---------- старт ---------- */
 let catError = false;
 
-// deep-link из бота: #market открывает Рынок, #fav — Избранное
+// deep-link из бота: #market — Рынок, #fav — Избранное, #flips — Выгода
 function tabFromHash() {
   const h = (location.hash || '').replace('#', '');
   if (h === 'market') return 'market';
   if (h === 'fav') return 'stash';
+  if (h === 'flips') return 'flips';
   return 'home';
 }
 function markActiveTab() {
@@ -1629,7 +1630,7 @@ function markActiveTab() {
   tab = tabFromHash();
   markActiveTab();
   if (tab === 'stash') renderStash();
-  else if (tab !== 'market') renderHome();
+  else if (tab !== 'market' && tab !== 'flips') renderHome();
   loadRuNames();
   // синхронизация с сервером + «онлайн» каждую минуту, пока приложение открыто
   setTimeout(async () => {
@@ -1642,6 +1643,7 @@ function markActiveTab() {
   loadPrices();
   try { await loadCatalog(); } catch(e) { catError = true; }
   if (tab === 'market') renderMarket();
+  else if (tab === 'flips') renderFlips();
 })();
 </script>
 </body>

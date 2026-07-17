@@ -522,6 +522,28 @@ async def cb_delalert(c: CallbackQuery):
     await c.message.delete()
 
 
+@router.callback_query(F.data == "digest_off")
+async def cb_digest_off(c: CallbackQuery):
+    """Кнопка «Отписаться» под дайджестом."""
+    await db.set_digest_off(c.from_user.id, True)
+    await c.answer("Отписал — дайджест больше не придёт. Включить обратно: /digest", show_alert=True)
+    try:
+        await c.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+
+@router.message(Command("digest"))
+async def cmd_digest(m: Message):
+    """Включить/выключить ежедневный дайджест «Выгода дня»."""
+    was_off = await db.get_digest_off(m.from_user.id)
+    await db.set_digest_off(m.from_user.id, not was_off)
+    if was_off:
+        await m.answer("🔔 Дайджест <b>«Выгода дня»</b> включён — топ сделок раз в день в 19:00 МСК.")
+    else:
+        await m.answer("🔕 Дайджест выключен. Включить обратно — /digest")
+
+
 # ---------- фоновые задачи ----------
 
 async def refresh_items():
@@ -1061,6 +1083,84 @@ async def collect_and_check(bot: Bot):
                 log.exception("Не смог отправить алерт tg_id=%s", tg_id)
 
 
+def _load_ru_names() -> dict:
+    try:
+        return json.loads(RUNAMES_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+async def build_digest_text():
+    """Собирает текст «Выгоды дня» из flips.json.
+
+    Возвращает (text, n_dips, n_movers) или None, если стоящей выгоды мало
+    (лучше пропустить день, чем прислать пустой дайджест).
+    """
+    try:
+        data = json.loads(FLIPS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+    top_dips = sorted(data.get("dips", []), key=lambda x: -x.get("margin", 0))[:3]
+    top_movers = sorted(data.get("movers", []), key=lambda x: -x.get("pct", 0))[:2]
+    if len(top_dips) < 2 and not top_movers:
+        return None
+
+    ru = _load_ru_names()
+
+    async def name_of(item_id: str) -> str:
+        nm = ru.get(item_id)
+        if not nm:
+            it = await db.get_item(item_id)
+            nm = it[1] if it else "предмет"
+        return html_mod.escape(nm)
+
+    today = datetime.now(timezone.utc).strftime("%d.%m")
+    lines = [f"🔥 <b>ВЫГОДА ДНЯ</b> · {today}", ""]
+    if top_dips:
+        lines += ["Пока цены на дне — момент закупиться 👇", "", "🟢 <b>БЕРИ ДЁШЕВО:</b>"]
+        for i, d in enumerate(top_dips, 1):
+            row = f"{i}. {await name_of(d['id'])} — <b>{fmt(d['price'])} ₮</b>"
+            if d.get("avg") and d.get("margin", 0) > 0:
+                row += f"\n    обычно ~{fmt(d['avg'])} → заработок <b>+{fmt(d['margin'])}</b>"
+            lines.append(row)
+    if top_movers:
+        lines += ["", "🔴 <b>ПРОДАВАЙ, ПОКА ДОРОГО</b> (взлёт за сутки):"]
+        for i, m in enumerate(top_movers, 1):
+            lines.append(f"{i}. {await name_of(m['id'])} — <b>{fmt(m['price'])} ₮</b> (+{m.get('pct', 0):.0f}%)")
+    lines += ["", "⏳ <i>Успей, пока не откупили · обновляется каждый час</i>"]
+    return "\n".join(lines), len(top_dips), len(top_movers)
+
+
+async def send_daily_digest(bot: Bot):
+    """Раз в день (16:00 UTC = 19:00 МСК): пуш «Выгода дня» подписчикам."""
+    built = await build_digest_text()
+    if not built:
+        log.info("Дайджест: мало выгоды сегодня — не шлю")
+        return
+    text, n_dips, n_movers = built
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💰 Открыть Выгоду", web_app=WebAppInfo(url=APP_URL + "#flips"))],
+        [InlineKeyboardButton(text="🔕 Отписаться", callback_data="digest_off")],
+    ])
+    recipients = await db.digest_recipients()
+    sent = 0
+    for tg_id in recipients:
+        try:
+            await bot.send_message(tg_id, text, reply_markup=kb, disable_web_page_preview=True)
+            sent += 1
+        except Exception as e:
+            low = str(e).lower()
+            if "bot was blocked" in low or "user is deactivated" in low:
+                await db.mark_blocked(tg_id)
+                log.info("Дайджест: %s заблокировал бота", tg_id)
+            else:
+                log.exception("Дайджест: не отправил tg_id=%s", tg_id)
+        await asyncio.sleep(0.05)
+    log.info("Дайджест разослан: %s из %s (просадок %s, растущих %s)",
+             sent, len(recipients), n_dips, n_movers)
+
+
 # ---------- main ----------
 
 async def main():
@@ -1089,6 +1189,7 @@ async def main():
     scheduler.add_job(credit_referrals, "interval", minutes=30, args=[bot])
     scheduler.add_job(market_snapshot, "interval", hours=1)
     scheduler.add_job(db.history_cleanup, "interval", hours=24)
+    scheduler.add_job(send_daily_digest, "cron", hour=16, minute=0, args=[bot])  # 19:00 МСК
     scheduler.start()
     asyncio.get_running_loop().create_task(refresh_ru_names())
     asyncio.get_running_loop().create_task(bootstrap_market())
