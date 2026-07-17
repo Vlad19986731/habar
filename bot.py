@@ -454,6 +454,15 @@ async def cb_alcust(c: CallbackQuery, state: FSMContext):
     await c.answer()
 
 
+@router.callback_query(F.data == "dismiss")
+async def cb_dismiss(c: CallbackQuery):
+    try:
+        await c.message.delete()
+    except Exception:
+        pass
+    await c.answer()
+
+
 @router.callback_query(F.data.startswith("delalert:"))
 async def cb_delalert(c: CallbackQuery):
     alert_id = int(c.data.split(":", 1)[1])
@@ -872,29 +881,38 @@ async def collect_and_check(bot: Bot):
         await asyncio.sleep(API_POLITE_DELAY)
     log.info("Снапшот цен: %s предметов", len(prices))
 
+    notified = set()   # (tg_id, item_id) — чтобы дубли не слали повторно за цикл
     for alert_id, tg_id, item_id, name, direction, threshold in await db.active_alerts():
         price = prices.get(item_id)
         if price is None:
             continue
         hit = price <= threshold if direction == "below" else price >= threshold
-        if hit:
-            emoji = "📉" if direction == "below" else "📈"
-            word = "подешевел до" if direction == "below" else "подорожал до"
-            try:
-                await bot.send_message(
-                    tg_id,
-                    f"{emoji} <b>{name}</b> {word} <b>{fmt(price)} ₮</b>!\n"
-                    f"<i>Твой порог: {fmt(threshold)} ₮</i>",
-                )
-                await db.alert_deactivate(alert_id)
-            except Exception as e:
-                # бот заблокирован пользователем — отмечаем и не тревожим больше
-                if "bot was blocked" in str(e).lower() or "user is deactivated" in str(e).lower():
-                    await db.mark_blocked(tg_id)
-                    await db.alert_deactivate(alert_id)
-                    log.info("Пользователь %s заблокировал бота", tg_id)
-                else:
-                    log.exception("Не смог отправить алерт tg_id=%s", tg_id)
+        if not hit:
+            continue
+        # одно уведомление на предмет: гасим ВСЕ алерты юзера на него сразу
+        if (tg_id, item_id) in notified:
+            await db.alert_deactivate(alert_id)
+            continue
+        notified.add((tg_id, item_id))
+        emoji = "📉" if direction == "below" else "📈"
+        word = "подешевел до" if direction == "below" else "подорожал до"
+        kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="👌 Убрать", callback_data="dismiss")]])
+        try:
+            await bot.send_message(
+                tg_id,
+                f"{emoji} <b>{name}</b> {word} <b>{fmt(price)} ₮</b>!\n"
+                f"<i>Твой порог: {fmt(threshold)} ₮</i>",
+                reply_markup=kb,
+            )
+            await db.alerts_deactivate_item(tg_id, item_id)
+        except Exception as e:
+            if "bot was blocked" in str(e).lower() or "user is deactivated" in str(e).lower():
+                await db.mark_blocked(tg_id)
+                await db.alerts_deactivate_item(tg_id, item_id)
+                log.info("Пользователь %s заблокировал бота", tg_id)
+            else:
+                log.exception("Не смог отправить алерт tg_id=%s", tg_id)
 
 
 # ---------- main ----------
