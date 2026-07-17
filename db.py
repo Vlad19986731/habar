@@ -13,8 +13,6 @@ CREATE TABLE IF NOT EXISTS users (
     username   TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
--- база клиентов: активность, привязка игрового аккаунта
-CREATE INDEX IF NOT EXISTS idx_users_seen ON users(last_seen);
 CREATE TABLE IF NOT EXISTS items (
     id       TEXT PRIMARY KEY,
     name     TEXT NOT NULL,
@@ -67,8 +65,8 @@ _USER_COLUMNS = [
 
 async def init() -> None:
     async with aiosqlite.connect(DB_PATH) as db:
-        # сначала таблицы, потом миграция колонок, потом индексы
-        await db.executescript(SCHEMA.split("-- база клиентов")[0])
+        # порядок важен: таблицы -> миграция колонок -> индексы по новым колонкам
+        await db.executescript(SCHEMA)
         cur = await db.execute("PRAGMA table_info(users)")
         have = {r[1] for r in await cur.fetchall()}
         for name, decl in _USER_COLUMNS:
