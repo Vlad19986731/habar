@@ -25,7 +25,7 @@
   body{
     background:var(--page); color:var(--text);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.45;
+    -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.45; overflow-x:hidden;
   }
   .num{font-variant-numeric:tabular-nums}
   .up{color:var(--green)} .dn{color:var(--red)}
@@ -33,7 +33,7 @@
 
   .app{
     max-width:480px; margin:0 auto; min-height:100vh; min-height:100dvh;
-    position:relative; overflow:hidden;
+    position:relative;
     display:flex; flex-direction:column; background:var(--app);
     border-left:1px solid var(--edge); border-right:1px solid var(--edge);
   }
@@ -306,21 +306,22 @@
   /* ---------- таб-бар ---------- */
   /* ---------- боковое меню (выезжающая панель) ---------- */
   #navgrip{
-    position:absolute; right:0; top:50%; transform:translateY(-50%); z-index:40;
-    width:20px; height:58px; display:flex; flex-direction:column; align-items:center;
-    justify-content:center; gap:5px; background:none; border:none; cursor:pointer;
-    opacity:.5; transition:opacity .2s; padding:0;
+    position:fixed; right:0; top:50%; transform:translateY(-50%); z-index:40;
+    width:22px; height:50px; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:5px; padding:0; cursor:pointer;
+    background:rgba(9,17,24,.6); border:1px solid rgba(15,247,150,.22); border-right:none;
+    border-radius:11px 0 0 11px; transition:opacity .2s, background .2s;
   }
   #navgrip span{width:4px; height:4px; border-radius:50%; background:var(--orange)}
-  #navgrip:active{opacity:1}
+  #navgrip:active{background:rgba(15,247,150,.14)}
   .app.navopen #navgrip{opacity:0; pointer-events:none}
   #navbd{
-    position:absolute; inset:0; z-index:41; background:rgba(2,6,10,.5);
+    position:fixed; inset:0; z-index:41; background:rgba(2,6,10,.5);
     opacity:0; pointer-events:none; transition:opacity .25s;
   }
   .app.navopen #navbd{opacity:1; pointer-events:auto}
   #navdrw{
-    position:absolute; top:0; right:0; height:100%; width:74%; max-width:320px; z-index:42;
+    position:fixed; top:0; bottom:0; right:0; width:74%; max-width:320px; z-index:42;
     background:rgba(9,17,24,.9); border-left:1px solid rgba(15,247,150,.3);
     transform:translateX(100%); transition:transform .3s cubic-bezier(.25,.85,.4,1);
     display:flex; flex-direction:column; gap:2px;
