@@ -1214,7 +1214,7 @@ async function renderHome() {
   };
 
   let ncache = null;
-  try { ncache = JSON.parse(localStorage.getItem('news_v1') || 'null'); } catch(e){}
+  try { ncache = JSON.parse(localStorage.getItem('news_v2') || 'null'); } catch(e){}
   if (ncache) {
     NEWS = ncache.steam || []; COMMUNITY = ncache.community || [];
     drawNews(); drawCommunity();
@@ -1222,7 +1222,7 @@ async function renderHome() {
   if (!ncache || Date.now() - ncache.ts > 18e5) {
     fetchT('news.json?_=' + Date.now()).then(r => r.json()).then(data => {
       NEWS = data.steam || []; COMMUNITY = data.community || [];
-      localStorage.setItem('news_v1', JSON.stringify({ts: Date.now(), steam: NEWS, community: COMMUNITY}));
+      localStorage.setItem('news_v2', JSON.stringify({ts: Date.now(), steam: NEWS, community: COMMUNITY}));
       drawNews(); drawCommunity();
     }).catch(() => {
       if (!NEWS.length) {
