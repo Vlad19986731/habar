@@ -829,22 +829,36 @@ async function openItem(id) {
   else if (dev >= 5) { sigBg='var(--red-bg)'; sigC='var(--red)'; sigDot='var(--red)'; sigTxt='Выше средней 7д на ' + dev.toFixed(0) + '% — дорого'; }
 
   // прогноз на методе «возврат к средней» (реальная точность направления ~60%, проверено бэктестом)
-  let forecastBlock = '';
+  let forecastBlock = '', fcastDir = null, fcastThr = 0;
   if (avgs.length >= 25) {
     const sorted = avgs.slice().sort((a,b)=>a-b);
     const median = sorted[Math.floor(sorted.length/2)] || price;
     const devMed = median ? (price - median)/median*100 : 0;
     let fC, fIcon, fDir, fWhy;
-    if (devMed <= -8) { fC='var(--green)'; fIcon='📈'; fDir='Вероятно вверх'; fWhy='Цена заметно ниже обычной — такие чаще отскакивают.'; }
-    else if (devMed >= 8) { fC='var(--red)'; fIcon='📉'; fDir='Вероятно вниз'; fWhy='Цена заметно выше обычной — такие чаще откатывают.'; }
-    else { fC='var(--text2)'; fIcon='➡️'; fDir='Скорее стабильно'; fWhy='Цена близка к обычной — явного движения не ждём.'; }
-    const target = Math.abs(devMed) >= 8 ? ' · ориентир ~' + fmt(median) + ' ₮' : '';
+    if (devMed <= -8) {
+      fC='var(--green)'; fIcon='📈'; fDir='Вероятно вверх';
+      fWhy='Цена ниже обычной — момент закупиться. Купи в игре, а я сообщу, когда подорожает до ориентира — пора продавать.';
+      fcastDir='u'; fcastThr=Math.round(median);
+    } else if (devMed >= 8) {
+      fC='var(--red)'; fIcon='📉'; fDir='Вероятно вниз';
+      fWhy='Цена выше обычной. Если ждёшь скидку — сообщу, когда откатит до ориентира, чтобы взять дешевле.';
+      fcastDir='d'; fcastThr=Math.round(median);
+    } else {
+      fC='var(--text2)'; fIcon='➡️'; fDir='Скорее стабильно';
+      fWhy='Цена близка к обычной — явного движения не ждём.';
+    }
+    const target = fcastDir ? ' · ориентир ~' + fmt(median) + ' ₮' : '';
     forecastBlock =
       '<div class="label" style="margin-top:14px">🔮 Прогноз</div>' +
       '<div class="signal" style="background:var(--surface);margin-top:8px"><i style="background:' + fC + '"></i>' +
         '<b style="color:' + fC + '">' + fIcon + ' ' + fDir + target + '</b></div>' +
       '<div class="hint" style="text-align:left;padding:7px 2px 0">' + fWhy +
-        ' Метод угадывает направление в ~60% случаев (проверено на истории). Не гарантия — рынок может уйти.</div>';
+        ' Метод угадывает направление в ~60% случаев (проверено на истории). Не гарантия — рынок может уйти.</div>' +
+      (fcastDir && !myAl
+        ? '<div class="btns" style="margin-top:8px"><button class="btn" id="fcastbtn">' +
+            (fcastDir === 'u' ? '🔔 Слежу на продажу ~' + fmt(fcastThr) : '🔔 Слежу на покупку ~' + fmt(fcastThr)) +
+          '</button></div>'
+        : '');
   }
 
   const wl = await wlGet();
@@ -915,6 +929,29 @@ async function openItem(id) {
     $('#aldown').onclick = () => showAlertPicker(id, 'd', price);
     $('#alup').onclick = () => showAlertPicker(id, 'u', price);
   }
+
+  // кнопка прогноза: поставить слежку сразу на целевую цену (ориентир)
+  const fb = $('#fcastbtn');
+  if (fb && fcastDir) fb.onclick = async () => {
+    fb.textContent = '⏳ Ставлю…';
+    const word = fcastDir === 'u' ? 'пора продавать' : 'пора покупать';
+    try {
+      const r = await srv('/alert', {item_id: id, dir: fcastDir, threshold: fcastThr});
+      if (r.ok === false && r.reason === 'already') { alSet(id, r.existing.d, r.existing.t); }
+      else {
+        let w = await wlGet(); if (!w.includes(id)) { w.push(id); wlSet(w); }
+        alSet(id, fcastDir, fcastThr);
+      }
+      fb.textContent = '✅ Сообщу при ~' + fmt(fcastThr) + ' ₮ — ' + word;
+      fb.classList.add('fill');
+      if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
+    } catch(e) {
+      let w = await wlGet(); if (!w.includes(id)) { w.push(id); wlSet(w); }
+      alSet(id, fcastDir, fcastThr);
+      fb.textContent = '✅ Принято — подтверди в боте';
+      setTimeout(() => openBotLink('al_' + fcastDir + '_' + id + '_' + fcastThr), 450);
+    }
+  };
 }
 
 function showAlertPicker(id, dir, price) {
