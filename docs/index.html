@@ -560,7 +560,7 @@ function rowHtml(it, removable) {
   const bell = alGet(it.id) ? ' <span style="color:var(--orange)">🔔</span>' : '';
   const rm = removable ? '<span class="rmx" data-rm="' + it.id + '">✕</span>' : '';
   return '<button class="row" data-id="' + it.id + '">' +
-    '<span class="well"><span class="ab">' + abbr(it.name) + '</span><img loading="lazy" src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
+    '<span class="well"><span class="ab">' + abbr(it.name) + '</span><img loading="lazy" decoding="async" src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
     '<span class="rmain"><b>' + displayName(it) + bell + '</b><span id="sub-' + it.id + '">…</span></span>' +
     '<span id="spark-' + it.id + '"></span>' +
     '<span class="rprice"><b class="num" id="p-' + it.id + '">·····</b><span class="num" id="d-' + it.id + '"></span></span>' +
@@ -843,7 +843,7 @@ async function openItem(id) {
   view.innerHTML = backBtn() +
     '<div class="card cut" style="margin-top:6px"><div class="strip"></div>' +
     '<div class="chead">' +
-      '<span class="well-lg cut-s"><span class="ab">' + abbr(it.name) + '</span><img src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
+      '<span class="well-lg cut-s"><span class="ab">' + abbr(it.name) + '</span><img decoding="async" src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
       '<div style="flex:1;min-width:0"><div class="label">Аукцион · Операции</div><div class="cname" id="cname">' + displayName(it) + '</div></div>' +
       (RUN[it.id] ? '<button class="langbtn" id="langbtn">' + (nameLang === 'ru' ? 'EN' : 'RU') + '</button>' : '') +
     '</div>' +
@@ -1025,7 +1025,7 @@ function flipCard(f, kind) {
   return '<button class="fcard" data-id="' + f.id + '">' +
     '<div style="display:flex;align-items:center;gap:9px">' +
       '<span class="well" style="width:34px;height:34px"><span class="ab">' + abbr(it.name) + '</span>' +
-        '<img loading="lazy" src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
+        '<img loading="lazy" decoding="async" src="' + it.icon + '" alt="" onerror="this.remove()"></span>' +
       '<b style="flex:1;min-width:0;color:var(--white);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left">' + displayName(it) + '</b>' +
       flipSpark(f.spark, col) +
     '</div>' +
