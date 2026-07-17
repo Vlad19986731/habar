@@ -169,6 +169,35 @@
   }
   .chip.on{color:#04140c; background:var(--orange); border-color:var(--orange); font-weight:800}
 
+  /* ---------- лента сообщества (горизонтальные баннеры) ---------- */
+  .brail{
+    display:flex; gap:10px; overflow-x:auto; padding-bottom:6px;
+    margin:0 -16px; padding-left:16px; padding-right:16px;
+    scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch;
+  }
+  .brail::-webkit-scrollbar{display:none}
+  .brail{scrollbar-width:none}
+  .bcard{
+    flex:0 0 250px; scroll-snap-align:start; position:relative; height:150px;
+    border:1px solid var(--border); overflow:hidden; cursor:pointer; padding:0;
+    background:var(--well); font-family:inherit; color:var(--text);
+    clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+  }
+  .bcard:active{border-color:var(--orange)}
+  .bcover{position:absolute; inset:0; display:block}
+  .bcover img{width:100%; height:100%; object-fit:cover; display:block}
+  .bsrc{
+    position:absolute; top:8px; left:8px; z-index:2; font-family:var(--mono);
+    font-size:9px; font-weight:800; letter-spacing:.08em; padding:3px 7px;
+    background:rgba(4,9,13,.72); backdrop-filter:blur(3px);
+  }
+  .bsrc.off{color:var(--orange); border:1px solid rgba(15,247,150,.45)}
+  .bsrc.ru{color:var(--amber); border:1px solid rgba(224,178,75,.45)}
+  .bgrad{position:absolute; inset:0; background:linear-gradient(to top,rgba(4,9,13,.95) 12%,rgba(4,9,13,.35) 52%,transparent)}
+  .btxt{position:absolute; left:0; right:0; bottom:0; z-index:2; padding:11px 12px; text-align:left}
+  .btxt b{display:block; font-size:13px; font-weight:800; line-height:1.32; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+  .btxt span{display:block; font-family:var(--mono); font-size:9.5px; color:var(--text3); margin-top:5px}
+
   /* ---------- новостные карточки ---------- */
   .nstack{display:flex; flex-direction:column; gap:8px}
   .ncard{
@@ -1125,7 +1154,9 @@ async function renderHome() {
     '<div class="livechip"><i></i><b>LIVE</b></div></div>' +
     '<div class="verline">TRADE.TERMINAL // DELTA FORCE OPS</div>' +
     '<div id="seasoncard" class="card cut" style="margin-top:14px"><div class="strip"></div><div class="spin" style="margin:12px auto"></div></div>' +
-    '<div class="label sect">Новости и обновления</div>' +
+    '<div class="label sect">Новости сообщества</div>' +
+    '<div class="brail" id="community"><div class="spin"></div></div>' +
+    '<div class="label sect">Патчи и обновления</div>' +
     '<div class="nstack" id="newslist"><div class="spin"></div></div>';
 
   // сезон: из кэша мгновенно, обновление в фоне, при полном отказе — «Повторить»
@@ -1157,29 +1188,48 @@ async function renderHome() {
     '<span class="nbody"><b>' + (n.title_ru || n.title) + '</b>' +
     (n.date ? '<span>' + new Date(n.date * 1000).toLocaleDateString('ru') + '</span>' : '') +
     '</span></button>';
-  // новости: из кэша мгновенно, обновление в фоне
+
+  // баннер-карточка сообщества (горизонтальная лента)
+  const banner = c => {
+    const off = c.src === 'ОФИЦ.';
+    const date = c.date ? new Date(c.date * 1000).toLocaleDateString('ru', {day:'2-digit', month:'2-digit'}) : '';
+    return '<button class="bcard" data-curl="' + String(c.url).replace(/"/g,'&quot;') + '">' +
+      '<span class="bcover"><img loading="lazy" decoding="async" src="' + c.img + '" alt="" onerror="this.style.display=\'none\'"></span>' +
+      '<span class="bsrc ' + (off ? 'off' : 'ru') + '">' + c.src + '</span>' +
+      '<span class="bgrad"></span>' +
+      '<span class="btxt"><b>' + esc(c.title) + '</b><span>' + date + (off ? ' · официальный' : ' · Delta Force RU') + '</span></span>' +
+      '</button>';
+  };
+  const drawCommunity = () => {
+    const el = document.getElementById('community');
+    if (!el) return;
+    el.innerHTML = (COMMUNITY && COMMUNITY.length)
+      ? COMMUNITY.map(banner).join('')
+      : '<div class="hint" style="padding:14px">Лента сообщества скоро появится.</div>';
+  };
   const drawNews = () => {
     const el = document.getElementById('newslist');
     if (el) el.innerHTML = NEWS.length ? NEWS.slice(0, 6).map(newsRow).join('')
       : '<div class="hint">Новостей пока нет</div>';
   };
+
   let ncache = null;
   try { ncache = JSON.parse(localStorage.getItem('news_v1') || 'null'); } catch(e){}
-  if (ncache && ncache.steam && ncache.steam.length) { NEWS = ncache.steam; drawNews(); }
+  if (ncache) {
+    NEWS = ncache.steam || []; COMMUNITY = ncache.community || [];
+    drawNews(); drawCommunity();
+  }
   if (!ncache || Date.now() - ncache.ts > 18e5) {
     fetchT('news.json?_=' + Date.now()).then(r => r.json()).then(data => {
-      NEWS = data.steam || [];
-      localStorage.setItem('news_v1', JSON.stringify({ts: Date.now(), steam: NEWS}));
-      drawNews();
+      NEWS = data.steam || []; COMMUNITY = data.community || [];
+      localStorage.setItem('news_v1', JSON.stringify({ts: Date.now(), steam: NEWS, community: COMMUNITY}));
+      drawNews(); drawCommunity();
     }).catch(() => {
       if (!NEWS.length) {
         const el = document.getElementById('newslist');
-        if (el) {
-          el.innerHTML = '<div class="hint">Не удалось загрузить 😕</div>' +
-            '<div class="btns"><button class="btn" id="newsretry">Повторить</button></div>';
-          const b = document.getElementById('newsretry');
-          if (b) b.onclick = renderHome;
-        }
+        if (el) el.innerHTML = '<div class="hint">Не удалось загрузить 😕</div>' +
+          '<div class="btns"><button class="btn" id="newsretry">Повторить</button></div>';
+        const b = document.getElementById('newsretry'); if (b) b.onclick = renderHome;
       }
     });
   }
@@ -1200,7 +1250,7 @@ function seasonCardHtml(s) {
     '<div class="hint" style="text-align:left;padding:10px 0 0">💡 Перед вайпом гир дешевеет — все распродаются. Сразу после вайпа дорожают материалы и базовый гир.</div>';
 }
 
-let NEWS = [];
+let NEWS = [], COMMUNITY = [];
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 function renderArticle(i) {
@@ -1415,6 +1465,8 @@ view.addEventListener('click', e => {
   if (fc) { setForecastAlert(fc); return; }
   const fo = e.target.closest('.fcard-open');
   if (fo && fo.dataset.id) { openItem(fo.dataset.id); return; }
+  const bc = e.target.closest('[data-curl]');
+  if (bc) { openExternal(bc.dataset.curl); return; }
   const row = e.target.closest('.row,.ncard,.fcard');
   if (!row) return;
   if (row.dataset.nidx !== undefined) { renderArticle(+row.dataset.nidx); return; }

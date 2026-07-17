@@ -549,7 +549,14 @@ def publish(rel_path: str, commit_msg: str) -> None:
             log.warning("git %s: %s", cmd[1], res.stderr.decode(errors="ignore")[:200])
 
 
-TG_NEWS_URL = "https://t.me/s/deltaforce_ru"
+# русскоязычные каналы для ленты сообщества: (username, короткий бейдж)
+TG_CHANNELS = [
+    ("deltaforcegameofficial", "ОФИЦ."),
+    ("deltaforce_ru", "DF RU"),
+]
+# мусорные посты канала (реклама/набор) — не тащим в ленту
+TG_SKIP = ("нужен боец", "ищем человека", "вакансия", "требуется", "@vavilonys",
+           "розыгрыш", "конкурс", "промокод", "реклама")
 # кэш переводов лежит рядом с базой (папка с кодом на сервере read-only)
 TR_CACHE_PATH = DATA_DIR / "trcache.json"
 _tr_cache: dict | None = None
@@ -637,8 +644,8 @@ async def _translate_long_en_ru(text: str) -> str:
     return "\n".join(out)
 
 
-def _parse_tg_posts(page: str, channel_limit: int = 6) -> list[dict]:
-    """Последние посты публичного TG-канала из превью-страницы t.me/s/..."""
+def _parse_tg_posts(page: str, src: str, channel_limit: int = 5) -> list[dict]:
+    """Посты с фото из публичного TG-канала (t.me/s/...) для ленты сообщества."""
     posts = []
     for block in page.split("tgme_widget_message_wrap")[1:]:
         m_post = re.search(r'data-post="([^"]+)"', block)
@@ -655,7 +662,10 @@ def _parse_tg_posts(page: str, channel_limit: int = 6) -> list[dict]:
             i = text.find(cut)
             if i > 20:
                 text = text[:i].strip()
-        if len(text) < 15:
+        low = text.lower()
+        if len(text) < 15 or not m_photo:            # для баннеров нужно фото
+            continue
+        if any(w in low for w in TG_SKIP):           # реклама/набор — пропускаем
             continue
         ts = 0
         if m_time:
@@ -663,9 +673,30 @@ def _parse_tg_posts(page: str, channel_limit: int = 6) -> list[dict]:
                 ts = int(datetime.fromisoformat(m_time.group(1).replace("Z", "+00:00")).timestamp())
             except ValueError:
                 pass
-        posts.append({"title": text[:150], "url": f"https://t.me/{m_post.group(1)}", "date": ts,
-                      "img": m_photo.group(1) if m_photo else ""})
+        posts.append({"title": text[:120], "url": f"https://t.me/{m_post.group(1)}", "date": ts,
+                      "img": m_photo.group(1), "src": src})
     return posts[-channel_limit:][::-1]  # свежие сверху
+
+
+async def fetch_community() -> list[dict]:
+    """Лента сообщества: посты из русских каналов, склеены, без дублей, свежие первыми."""
+    all_posts = []
+    for username, badge in TG_CHANNELS:
+        try:
+            r = await api._client.get(f"https://t.me/s/{username}", headers={"User-Agent": "Mozilla/5.0"})
+            r.raise_for_status()
+            all_posts += _parse_tg_posts(r.text, badge)
+        except Exception:
+            log.exception("Канал %s недоступен", username)
+    # дедуп по началу заголовка (репосты между каналами)
+    seen, uniq = set(), []
+    for p in sorted(all_posts, key=lambda x: -x["date"]):
+        key = re.sub(r"\W+", "", p["title"].lower())[:40]
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(p)
+    return uniq[:12]
 
 
 RUNAMES_PATH = WEB_DIR / "names_ru.json"
@@ -726,13 +757,14 @@ async def refresh_news():
                 })
         except Exception:
             log.exception("Steam-новости недоступны")
-        if not steam:
+        community = await fetch_community()
+        if not steam and not community:
             return
-        news = {"steam": steam}
+        news = {"community": community, "steam": steam}
         if NEWS_PATH.exists():
             try:
                 old = json.loads(NEWS_PATH.read_text(encoding="utf-8"))
-                if old.get("steam") == steam:
+                if old.get("steam") == steam and old.get("community") == community:
                     return  # ничего нового
             except Exception:
                 pass
@@ -741,7 +773,7 @@ async def refresh_news():
             encoding="utf-8",
         )
         publish("docs/news.json", "news: auto-update")
-        log.info("Новости обновлены: steam=%s", len(steam))
+        log.info("Новости обновлены: steam=%s, сообщество=%s", len(steam), len(community))
     except Exception:
         log.exception("Не удалось обновить новости")
 
