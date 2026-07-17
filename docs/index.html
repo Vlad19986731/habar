@@ -1267,6 +1267,16 @@ function renderMore() {
 }
 
 /* ---------- события ---------- */
+// как только иконка предмета загрузилась — прячем буквенную заглушку под ней
+document.addEventListener('load', e => {
+  const img = e.target;
+  if (img.tagName === 'IMG' && img.parentElement &&
+      (img.parentElement.classList.contains('well') || img.parentElement.classList.contains('well-lg'))) {
+    const ab = img.parentElement.querySelector('.ab');
+    if (ab) ab.style.display = 'none';
+  }
+}, true);
+
 view.addEventListener('click', e => {
   const rm = e.target.closest('[data-rm]');
   if (rm) { handleRemoveFav(rm.dataset.rm); return; }
