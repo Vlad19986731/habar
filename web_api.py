@@ -189,6 +189,18 @@ async def api_pro_claim(request, u):
     return web.json_response({"ok": True, "pro_until": until})
 
 
+@routes.post("/api/series")
+@need_auth
+async def api_series(request, u):
+    """7-дневный график из НАШЕЙ истории цен — надёжно, без чужого API."""
+    body = await request.json()
+    item_id = body.get("item_id")
+    if not item_id:
+        return web.json_response({"error": "bad_request"}, status=400)
+    rows = await db.item_series(item_id, 7)
+    return web.json_response({"prices": [{"timestamp": ts, "priceAvg": price} for ts, price in rows]})
+
+
 async def start_api() -> None:
     app = web.Application()
     app.add_routes(routes)

@@ -865,17 +865,20 @@ async function openItem(id) {
   await paintCard(it, id, cachedP, [], {ch24: (cch[2] == null ? null : cch[2]), live: false});
   // 2) ФОНОМ подтягиваем живую цену + график и обновляем карточку (чужой API бывает медленный/недоступен)
   try {
-    const res = await Promise.all([
-      api('GetAuctionItemPrice', {auctionItemId:id}),
-      api('GetAuctionItemPriceSeries', {auctionItemId:id, startTime: new Date(Date.now()-7*864e5).toISOString().slice(0,13)+':00:00Z'})
+    // График — из НАШЕЙ истории (надёжно, без чужого API); живая цена — из чужого API (best-effort)
+    const settled = await Promise.allSettled([
+      srv('/series', {item_id: id}),
+      api('GetAuctionItemPrice', {auctionItemId: id})
     ]);
     if (openItem._gen !== myGen) return;                 // юзер уже переоткрыл/ушёл
     const alp = document.getElementById('alpick');
     if (alp && alp.children.length) return;              // не сбиваем открытый выбор порога
-    const spts = ((res[1] && res[1].prices) || []).filter(x => x.priceAvg);
-    const liveAvgs = spts.map(x => x.priceAvg);
-    await paintCard(it, id, (res[0] && res[0].price) || cachedP, liveAvgs, {live: true, times: spts.map(x => x.timestamp)});
-  } catch(e) { /* тихо: остаётся мгновенная кэш-карточка, экрана ошибки нет */ }
+    const ser = settled[0].status === 'fulfilled' ? settled[0].value : null;
+    const spts = ((ser && ser.prices) || []).filter(x => x.priceAvg);
+    const pr = settled[1].status === 'fulfilled' ? settled[1].value : null;
+    const livePrice = (pr && pr.price) ? pr.price : cachedP;
+    await paintCard(it, id, livePrice, spts.map(x => x.priceAvg), {live: true, times: spts.map(x => x.timestamp)});
+  } catch(e) { /* тихо: остаётся мгновенная кэш-карточка */ }
 }
 
 async function paintCard(it, id, p, avgs, opts) {
@@ -944,7 +947,7 @@ async function paintCard(it, id, p, avgs, opts) {
     '</div>' +
     '<div class="bigprice num">' + (price ? fmt(price) : '…') + ' <span>₮</span></div>' +
     '<div class="chips">' + chip(d24,'24Ч') + chip(d7,'7Д') + '</div>' +
-    (avgs.length ? ('<div class="cw" id="chartw">' + chartSvg(avgs) + '<div class="cx" id="chx"></div><div class="cdot" id="chdot"></div><div class="ctip" id="chtip"><div class="v"></div><div class="d"></div></div></div>') : '<div style="height:72px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:11px">график за 7 дней загружается…</div>') +
+    (avgs.length ? ('<div class="cw" id="chartw">' + chartSvg(avgs) + '<div class="cx" id="chx"></div><div class="cdot" id="chdot"></div><div class="ctip" id="chtip"><div class="v"></div><div class="d"></div></div></div>') : ('<div style="height:72px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:11px">' + (opts.live ? 'пока нет истории цен для графика' : 'график за 7 дней загружается…') + '</div>')) +
     '<div class="chart-meta"><span>' + (p.referencePrice ? 'РЕФ. ЦЕНА ' + fmt(p.referencePrice) : '') + '</span><span>7 ДНЕЙ</span></div>' +
     '<div class="signal" style="background:' + sigBg + '"><i style="background:' + sigDot + '"></i><b style="color:' + sigC + '">' + sigTxt + '</b></div>' +
     dealBlock +

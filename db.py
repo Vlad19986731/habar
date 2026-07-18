@@ -479,6 +479,15 @@ async def history_rows_7d() -> list[tuple]:
         return await cur.fetchall()
 
 
+async def item_series(item_id: str, days: int = 7) -> list[tuple]:
+    """Наша история цен одного предмета за N дней: [(ts, price), ...] — для графика в карточке."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT ts, price FROM price_history WHERE item_id=? "
+            "AND ts > datetime('now', ?) ORDER BY ts", (item_id, f"-{days} days"))
+        return await cur.fetchall()
+
+
 async def history_add_many(rows: list[tuple]) -> None:
     """rows: [(item_id, ts, price), ...] — массовая вставка (бэкфилл)."""
     async with aiosqlite.connect(DB_PATH) as db:
