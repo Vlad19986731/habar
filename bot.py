@@ -672,7 +672,7 @@ async def _translate_long_en_ru(text: str) -> str:
     return "\n".join(out)
 
 
-def _parse_tg_posts(page: str, src: str, channel_limit: int = 5) -> list[dict]:
+def _parse_tg_posts(page: str, src: str, channel_limit: int = 5, skip_ads: bool = True) -> list[dict]:
     """Посты с фото из публичного TG-канала (t.me/s/...) для ленты сообщества."""
     posts = []
     for block in page.split("tgme_widget_message_wrap")[1:]:
@@ -693,7 +693,7 @@ def _parse_tg_posts(page: str, src: str, channel_limit: int = 5) -> list[dict]:
         low = text.lower()
         if len(text) < 15 or not m_photo:            # для баннеров нужно фото
             continue
-        if any(w in low for w in TG_SKIP):           # реклама/набор — пропускаем
+        if skip_ads and any(w in low for w in TG_SKIP):  # реклама/набор — пропускаем (кроме офиц. канала)
             continue
         ts = 0
         if m_time:
@@ -713,7 +713,7 @@ async def fetch_community() -> list[dict]:
         try:
             r = await api._client.get(f"https://t.me/s/{username}", headers={"User-Agent": "Mozilla/5.0"})
             r.raise_for_status()
-            all_posts += _parse_tg_posts(r.text, badge)
+            all_posts += _parse_tg_posts(r.text, badge, skip_ads=(username != "deltaforcegameofficial"))
         except Exception:
             log.exception("Канал %s недоступен", username)
     # дедуп по началу заголовка (репосты между каналами)
