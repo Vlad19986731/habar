@@ -343,6 +343,14 @@
   .navitem.on{color:var(--orange); opacity:1}
   .navitem.big.on .ni{background:rgba(15,247,150,.2)}
   .navdiv{height:1px; background:var(--divider); margin:8px 20px}
+  /* интерактивный график: кроссхэйр + плашка у точки */
+  .cw{position:relative; touch-action:none; cursor:crosshair}
+  .cw svg{display:block; width:100%}
+  .cx{position:absolute; top:0; bottom:0; width:1px; background:rgba(15,247,150,.55); left:0; opacity:0; pointer-events:none}
+  .cdot{position:absolute; width:11px; height:11px; border-radius:50%; background:var(--orange); border:2px solid var(--surface); transform:translate(-50%,-50%); opacity:0; pointer-events:none}
+  .ctip{position:absolute; transform:translate(-50%,-118%); background:var(--page); border:1px solid rgba(15,247,150,.4); border-radius:8px; padding:5px 9px; pointer-events:none; opacity:0; white-space:nowrap; z-index:3}
+  .ctip .v{font:700 12px/1.3 var(--mono); color:var(--orange)}
+  .ctip .d{font:600 9px/1.3 var(--mono); color:var(--text2); margin-top:2px}
 </style>
 </head>
 <body>
@@ -864,8 +872,9 @@ async function openItem(id) {
     if (openItem._gen !== myGen) return;                 // юзер уже переоткрыл/ушёл
     const alp = document.getElementById('alpick');
     if (alp && alp.children.length) return;              // не сбиваем открытый выбор порога
-    const liveAvgs = ((res[1] && res[1].prices) || []).map(x => x.priceAvg).filter(Boolean);
-    await paintCard(it, id, (res[0] && res[0].price) || cachedP, liveAvgs, {live: true});
+    const spts = ((res[1] && res[1].prices) || []).filter(x => x.priceAvg);
+    const liveAvgs = spts.map(x => x.priceAvg);
+    await paintCard(it, id, (res[0] && res[0].price) || cachedP, liveAvgs, {live: true, times: spts.map(x => x.timestamp)});
   } catch(e) { /* тихо: остаётся мгновенная кэш-карточка, экрана ошибки нет */ }
 }
 
@@ -935,7 +944,7 @@ async function paintCard(it, id, p, avgs, opts) {
     '</div>' +
     '<div class="bigprice num">' + (price ? fmt(price) : '…') + ' <span>₮</span></div>' +
     '<div class="chips">' + chip(d24,'24Ч') + chip(d7,'7Д') + '</div>' +
-    (avgs.length ? chartSvg(avgs) : '<div style="height:72px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:11px">график за 7 дней загружается…</div>') +
+    (avgs.length ? ('<div class="cw" id="chartw">' + chartSvg(avgs) + '<div class="cx" id="chx"></div><div class="cdot" id="chdot"></div><div class="ctip" id="chtip"><div class="v"></div><div class="d"></div></div></div>') : '<div style="height:72px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:11px">график за 7 дней загружается…</div>') +
     '<div class="chart-meta"><span>' + (p.referencePrice ? 'РЕФ. ЦЕНА ' + fmt(p.referencePrice) : '') + '</span><span>7 ДНЕЙ</span></div>' +
     '<div class="signal" style="background:' + sigBg + '"><i style="background:' + sigDot + '"></i><b style="color:' + sigC + '">' + sigTxt + '</b></div>' +
     dealBlock +
@@ -946,6 +955,35 @@ async function paintCard(it, id, p, avgs, opts) {
     '<div class="src">' + (opts.live ? 'Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com' : '≈ цена за последний час · обновляю…') + '</div>' +
     '</div>';
   $('#bk').onclick = goBack;
+  if (avgs.length) {
+    const cw = document.getElementById('chartw');
+    const chx = document.getElementById('chx'), chdot = document.getElementById('chdot'), chtip = document.getElementById('chtip');
+    if (cw && chx && chdot && chtip) {
+      const clo = Math.min.apply(null, avgs), chi = Math.max.apply(null, avgs), cpad = 4, cH = 72;
+      const times = opts.times || [];
+      const yP = v => (cpad + (chi - v) * (cH - 2*cpad) / ((chi - clo) || 1)) / cH * 100;
+      const xP = i => avgs.length > 1 ? i / (avgs.length - 1) * 100 : 50;
+      const fmtT = ts => { const d = new Date(ts); return isNaN(d.getTime()) ? '' : d.toLocaleString('ru',{day:'2-digit',month:'2-digit'}) + ' ' + d.toLocaleString('ru',{hour:'2-digit',minute:'2-digit'}); };
+      const chShow = i => {
+        const v = avgs[i];
+        chx.style.left = xP(i) + '%'; chx.style.opacity = 1;
+        chdot.style.left = xP(i) + '%'; chdot.style.top = yP(v) + '%'; chdot.style.opacity = 1;
+        chtip.style.left = xP(i) + '%'; chtip.style.top = yP(v) + '%'; chtip.style.opacity = 1;
+        chtip.querySelector('.v').textContent = fmt(v) + ' ₮';
+        chtip.querySelector('.d').textContent = times[i] ? fmtT(times[i]) : '';
+      };
+      const chHide = () => { chx.style.opacity = 0; chdot.style.opacity = 0; chtip.style.opacity = 0; };
+      const chMove = e => {
+        const r = cw.getBoundingClientRect();
+        const px = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+        chShow(Math.max(0, Math.min(avgs.length - 1, Math.round(px / r.width * (avgs.length - 1)))));
+      };
+      cw.addEventListener('pointerdown', chMove);
+      cw.addEventListener('pointermove', chMove);
+      cw.addEventListener('pointerleave', chHide);
+      cw.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') chHide(); });
+    }
+  }
   const lb = $('#langbtn');
   if (lb) lb.onclick = () => {
     nameLang = nameLang === 'ru' ? 'en' : 'ru';
