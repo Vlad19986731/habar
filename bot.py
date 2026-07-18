@@ -764,7 +764,7 @@ async def refresh_ru_names():
 
 
 async def refresh_news():
-    """Каждые 6 часов: Steam-патчи + RU-канал -> docs/news.json -> git push.
+    """Каждые 2 часа: Steam-патчи + RU-канал -> docs/news.json -> git push.
 
     GitHub Pages раздаёт файл приложению (обход CORS без своего сервера).
     """
@@ -1244,7 +1244,7 @@ async def main():
 
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(refresh_items, "interval", hours=24)
-    scheduler.add_job(refresh_news, "interval", hours=6)
+    scheduler.add_job(refresh_news, "interval", hours=2)
     scheduler.add_job(refresh_ru_names, "interval", hours=24)
     scheduler.add_job(collect_and_check, "interval", minutes=COLLECT_EVERY_MIN, args=[bot])
     scheduler.add_job(warm_profiles, "interval", minutes=WARM_EVERY_MIN)
