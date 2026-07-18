@@ -849,27 +849,34 @@ async function openItem(id) {
   view.innerHTML = backBtn() + '<div class="spin"></div>';
   $('#bk').onclick = goBack;
 
-  let priceD, series;
+  openItem._gen = (openItem._gen || 0) + 1;
+  const myGen = openItem._gen;
+  // 1) МГНОВЕННО из кэша (prices.json уже в памяти) — карточка открывается сразу, без ожидания чужого API
+  const cch = (PRICES && PRICES[id]) || [];
+  const cachedP = {price: cch[0] || 0, referencePrice: cch[1] || 0};
+  await paintCard(it, id, cachedP, [], {ch24: (cch[2] == null ? null : cch[2]), live: false});
+  // 2) ФОНОМ подтягиваем живую цену + график и обновляем карточку (чужой API бывает медленный/недоступен)
   try {
     const res = await Promise.all([
       api('GetAuctionItemPrice', {auctionItemId:id}),
       api('GetAuctionItemPriceSeries', {auctionItemId:id, startTime: new Date(Date.now()-7*864e5).toISOString().slice(0,13)+':00:00Z'})
     ]);
-    priceD = res[0]; series = res[1];
-  } catch(e) {
-    view.innerHTML = backBtn() + '<div class="hint">Сервер цен не отвечает 😕<br>Бывает на мобильной сети.</div>' +
-      '<div class="btns" style="margin-top:4px"><button class="btn" id="retrycard">Повторить</button></div>';
-    $('#bk').onclick = goBack;
-    $('#retrycard').onclick = () => openItem(id);
-    return;
-  }
-  const p = priceD.price || {};
-  const avgs = (series.prices || []).map(x => x.priceAvg).filter(Boolean);
+    if (openItem._gen !== myGen) return;                 // юзер уже переоткрыл/ушёл
+    const alp = document.getElementById('alpick');
+    if (alp && alp.children.length) return;              // не сбиваем открытый выбор порога
+    const liveAvgs = ((res[1] && res[1].prices) || []).map(x => x.priceAvg).filter(Boolean);
+    await paintCard(it, id, (res[0] && res[0].price) || cachedP, liveAvgs, {live: true});
+  } catch(e) { /* тихо: остаётся мгновенная кэш-карточка, экрана ошибки нет */ }
+}
+
+async function paintCard(it, id, p, avgs, opts) {
+  opts = opts || {};
   const price = p.price || 0;
 
   let d24 = null, d7 = null;
   if (avgs.length >= 25) d24 = (price - avgs[avgs.length-25]) / avgs[avgs.length-25] * 100;
   if (avgs.length > 1)  d7  = (price - avgs[0]) / avgs[0] * 100;
+  if (d24 === null && opts.ch24 != null) d24 = opts.ch24;   // 24ч из кэша, пока график грузится
   const avg7 = avgs.length ? avgs.reduce((a,b)=>a+b,0)/avgs.length : 0;
   const dev = avg7 ? (price - avg7)/avg7*100 : 0;
 
@@ -877,9 +884,9 @@ async function openItem(id) {
     '<span class="chip num" style="background:var(--' + (v>=0?'green':'red') + '-bg);color:var(--' + (v>=0?'green':'red') + ');border-color:var(--' + (v>=0?'green':'red') + '-bd)">' +
     (v>=0?'▲ +':'▼ ') + v.toFixed(1) + '% ' + lbl + '</span>';
 
-  let sigBg='var(--divider)', sigC='var(--text2)', sigDot='var(--text2)', sigTxt='Около средней за 7 дней';
-  if (dev <= -5) { sigBg='var(--green-bg)'; sigC='var(--green)'; sigDot='var(--green)'; sigTxt='Ниже средней 7д на ' + Math.abs(dev).toFixed(0) + '% — точка входа'; }
-  else if (dev >= 5) { sigBg='var(--red-bg)'; sigC='var(--red)'; sigDot='var(--red)'; sigTxt='Выше средней 7д на ' + dev.toFixed(0) + '% — дорого'; }
+  let sigBg='var(--divider)', sigC='var(--text2)', sigDot='var(--text2)', sigTxt = avgs.length ? 'Около средней за 7 дней' : '⏳ Обновляю данные…';
+  if (avgs.length && dev <= -5) { sigBg='var(--green-bg)'; sigC='var(--green)'; sigDot='var(--green)'; sigTxt='Ниже средней 7д на ' + Math.abs(dev).toFixed(0) + '% — точка входа'; }
+  else if (avgs.length && dev >= 5) { sigBg='var(--red-bg)'; sigC='var(--red)'; sigDot='var(--red)'; sigTxt='Выше средней 7д на ' + dev.toFixed(0) + '% — дорого'; }
 
   // --- Вердикт «вендор или аукцион» (v1) ---
   // Выкуп вендора принимаем ≈ referencePrice (статичная базовая цена из API).
@@ -926,9 +933,9 @@ async function openItem(id) {
       '<div style="flex:1;min-width:0"><div class="label">Аукцион · Операции</div><div class="cname" id="cname">' + displayName(it) + '</div></div>' +
       (RUN[it.id] ? '<button class="langbtn" id="langbtn">' + (nameLang === 'ru' ? 'EN' : 'RU') + '</button>' : '') +
     '</div>' +
-    '<div class="bigprice num">' + fmt(price) + ' <span>₮</span></div>' +
+    '<div class="bigprice num">' + (price ? fmt(price) : '…') + ' <span>₮</span></div>' +
     '<div class="chips">' + chip(d24,'24Ч') + chip(d7,'7Д') + '</div>' +
-    chartSvg(avgs) +
+    (avgs.length ? chartSvg(avgs) : '<div style="height:72px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:11px">график за 7 дней загружается…</div>') +
     '<div class="chart-meta"><span>' + (p.referencePrice ? 'РЕФ. ЦЕНА ' + fmt(p.referencePrice) : '') + '</span><span>7 ДНЕЙ</span></div>' +
     '<div class="signal" style="background:' + sigBg + '"><i style="background:' + sigDot + '"></i><b style="color:' + sigC + '">' + sigTxt + '</b></div>' +
     dealBlock +
@@ -936,7 +943,7 @@ async function openItem(id) {
       '<button class="btn ' + (inWl?'fill':'') + '" id="wlbtn">' + (inWl ? '✓ В избранном' : '⭐ В избранное') + '</button>' +
     '</div>' +
     alertBlock +
-    '<div class="src">Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com</div>' +
+    '<div class="src">' + (opts.live ? 'Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com' : '≈ цена за последний час · обновляю…') + '</div>' +
     '</div>';
   $('#bk').onclick = goBack;
   const lb = $('#langbtn');
