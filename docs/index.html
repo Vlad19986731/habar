@@ -352,22 +352,21 @@
   .ctip .v{font:700 12px/1.3 var(--mono); color:var(--orange)}
   .ctip .d{font:600 9px/1.3 var(--mono); color:var(--text2); margin-top:2px}
 
-  /* голосование за карту (Главная) */
-  .mpgrid{display:grid; grid-template-columns:1fr 1fr; gap:9px}
-  .mpcard{position:relative; aspect-ratio:4/3; border-radius:12px; overflow:hidden; border:1px solid var(--border); background:var(--well); cursor:pointer; padding:0; font:inherit; color:var(--text); transition:transform .1s}
+  /* голосование за карту (Главная) — текстовые карточки */
+  .mpgrid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .mpcard{position:relative; overflow:hidden; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 13px 13px; min-height:100px; cursor:pointer; color:var(--text); font:inherit; text-align:left; display:flex; flex-direction:column; transition:border-color .16s, transform .1s, background .16s}
   .mpcard:active{transform:scale(.985)}
-  .mpcard.on{border:2px solid var(--orange)}
-  .mpart{position:absolute; inset:0}
-  .mpimg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1}
-  .mpscrim{position:absolute; inset:0; z-index:2; background:linear-gradient(180deg,rgba(4,9,13,.05) 30%,rgba(4,9,13,.92))}
-  .mpmeta{position:absolute; left:10px; right:10px; bottom:9px; z-index:3; text-align:left}
-  .mpcode{font-family:var(--mono); font-size:9px; letter-spacing:.14em; color:var(--orange); text-transform:uppercase; margin-bottom:2px}
-  .mpname{font-size:13px; font-weight:800; line-height:1.2; text-shadow:0 1px 3px rgba(0,0,0,.75)}
-  .mppick{display:none; align-items:center; gap:4px; font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--orange); margin-top:5px}
+  .mpcard.on{border:2px solid var(--orange); background:var(--well)}
+  .mpmono{position:absolute; right:6px; bottom:-14px; font-family:var(--mono); font-weight:800; font-size:58px; line-height:1; color:#fff; opacity:.05; letter-spacing:-.02em; pointer-events:none}
+  .mpcard.on .mpmono{color:var(--orange); opacity:.14}
+  .mpbrk{position:absolute; top:9px; left:9px; width:11px; height:11px; border:solid rgba(15,247,150,.5); border-width:1px 0 0 1px}
+  .mpcode{font-family:var(--mono); font-size:9.5px; letter-spacing:.16em; color:var(--orange); text-transform:uppercase; margin:2px 0 0 14px}
+  .mpname{font-size:15px; font-weight:800; line-height:1.15; margin-top:auto; padding-top:10px; position:relative; z-index:1}
+  .mpuline{width:22px; height:2px; background:var(--orange); border-radius:2px; margin-top:8px; opacity:.85}
+  .mppick{display:none; align-items:center; gap:5px; font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--orange); margin-top:8px}
   .mpcard.on .mppick{display:flex}
-  .mpnew{position:absolute; top:8px; right:8px; z-index:3; font-family:var(--mono); font-size:8.5px; font-weight:800; letter-spacing:.1em; background:var(--amber); color:#1a1204; padding:2px 6px; border-radius:4px}
-  .mpcheck{position:absolute; top:8px; left:8px; z-index:3; width:22px; height:22px; border-radius:50%; background:var(--orange); color:#04140c; display:none; align-items:center; justify-content:center; font-size:13px; font-weight:800}
-  .mpcard.on .mpcheck{display:flex}
+  .mpcard.on .mpuline{display:none}
+  .mpnew{position:absolute; top:9px; right:9px; font-family:var(--mono); font-size:8.5px; font-weight:800; letter-spacing:.1em; background:var(--amber); color:#1a1204; padding:2px 6px; border-radius:4px}
   .mphint{color:var(--text2); font-size:12px; text-align:center; margin:11px 4px 2px; min-height:16px}
   .mphint b{color:var(--orange)}
 </style>
@@ -1379,21 +1378,13 @@ async function renderHome() {
 
 /* ---------- голосование за карту (счётчики скрыты, виден только свой выбор) ---------- */
 const MP_MAPS = [
-  {id:'zero',   code:'DAM-00',   name:'Плотина Зеро',      img:'img/zero_dam.jpg'},
-  {id:'space',  code:'ORBIT-02', name:'Космический город', img:'img/space_city.jpg'},
-  {id:'layali', code:'GROVE-07', name:'Роща Лаяли',        img:'img/layali_grove.jpg'},
-  {id:'brak',   code:'BRAKKESH', name:'Брекеш',            img:'img/brakkesh.jpg'},
-  {id:'tide',   code:'TIDE-09',  name:'Тюрьма «Прилив»',   img:'img/tide_prison.jpg'},
-  {id:'az3',    code:'AZ-03',    name:'АЭС AZ3', tag:'NEW', img:'img/az3.jpg'}
+  {id:'zero',   code:'DAM-00',   mono:'ZD', name:'Плотина Зеро'},
+  {id:'space',  code:'ORBIT-02', mono:'SC', name:'Космический город'},
+  {id:'layali', code:'GROVE-07', mono:'LG', name:'Роща Лаяли'},
+  {id:'brak',   code:'BRAKKESH', mono:'BK', name:'Брекеш'},
+  {id:'tide',   code:'TIDE-09',  mono:'TP', name:'Тюрьма «Прилив»'},
+  {id:'az3',    code:'AZ-03',    mono:'AZ', name:'АЭС AZ3', tag:'NEW'}
 ];
-const MP_ART = {
-  zero:'linear-gradient(180deg,#1b2b33,#24424a 55%,#0e2325)',
-  space:'linear-gradient(180deg,#141634,#1e2350 55%,#0c1030)',
-  layali:'linear-gradient(180deg,#3b4a2a,#294a20 55%,#122010)',
-  brak:'linear-gradient(180deg,#3a2e1c,#5a4423 55%,#241a0f)',
-  tide:'linear-gradient(180deg,#1c2a30,#243a42 55%,#0f2024)',
-  az3:'linear-gradient(180deg,#16281f,#1d3a2c 55%,#0c1c15)'
-};
 function mpVoteGet(){ try { return localStorage.getItem('mapvote') || null; } catch(e) { return null; } }
 function mpMark(id){
   document.querySelectorAll('#mpgrid .mpcard').forEach(el => el.classList.toggle('on', el.dataset.id === id));
@@ -1419,14 +1410,13 @@ function renderMapPoll(){
   const grid = document.getElementById('mpgrid'); if (!grid) return;
   grid.innerHTML = MP_MAPS.map(m =>
     '<button class="mpcard" data-id="' + m.id + '" aria-label="Голосовать за ' + esc(m.name) + '">' +
-      '<div class="mpart" style="background:' + MP_ART[m.id] + '"></div>' +
-      '<img class="mpimg" loading="lazy" src="' + m.img + '" alt="" onerror="this.remove()">' +
-      '<div class="mpscrim"></div>' +
+      '<span class="mpmono">' + m.mono + '</span>' +
+      '<span class="mpbrk"></span>' +
       (m.tag ? '<span class="mpnew">' + m.tag + '</span>' : '') +
-      '<div class="mpcheck">✓</div>' +
-      '<div class="mpmeta"><div class="mpcode">' + m.code + '</div>' +
-        '<div class="mpname">' + esc(m.name) + '</div>' +
-        '<div class="mppick">✓ ваш выбор</div></div>' +
+      '<div class="mpcode">' + m.code + '</div>' +
+      '<div class="mpname">' + esc(m.name) + '</div>' +
+      '<div class="mpuline"></div>' +
+      '<div class="mppick">✓ ваш выбор</div>' +
     '</button>').join('');
   grid.querySelectorAll('.mpcard').forEach(el => el.onclick = () => mpVote(el.dataset.id));
   mpMark(mpVoteGet());
