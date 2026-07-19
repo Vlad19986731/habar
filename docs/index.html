@@ -375,6 +375,10 @@
     <button class="navitem big" data-tab="stash">
       <span class="ni"><svg viewBox="0 0 20 20"><polygon points="10,1.5 12.6,7 18.5,7.8 14.2,11.9 15.2,17.7 10,14.9 4.8,17.7 5.8,11.9 1.5,7.8 7.4,7"/></svg></span><span class="nl">Избранное</span>
     </button>
+    <div class="navdiv"></div>
+    <button class="navitem sec" data-tab="support">
+      <svg viewBox="0 0 20 20"><path d="M10 2.5c-4.3 0-7.5 2.8-7.5 6.2 0 1.9 1 3.6 2.6 4.8-.1 1-.6 2.1-1.3 2.9 1.4-.2 2.7-.7 3.7-1.4.8.3 1.7.4 2.5.4 4.3 0 7.5-2.8 7.5-6.2S14.3 2.5 10 2.5z"/><circle cx="6.6" cy="8.7" r="1" fill="#060E13"/><circle cx="10" cy="8.7" r="1" fill="#060E13"/><circle cx="13.4" cy="8.7" r="1" fill="#060E13"/></svg><span class="nl">Поддержка</span>
+    </button>
   </aside>
 </div>
 
@@ -1704,6 +1708,7 @@ document.querySelectorAll('.navitem').forEach(b => b.onclick = () => {
   else if (tab === 'market') renderMarket();
   else if (tab === 'flips') renderFlips();
   else if (tab === 'stash') renderStash();
+  else if (tab === 'support') renderSupport();
   else renderMore();
 });
 
@@ -1718,6 +1723,34 @@ function tabFromHash() {
   if (h === 'flips') return 'flips';
   return 'home';
 }
+function renderSupport() {
+  view.innerHTML =
+    '<div class="card cut" style="margin-top:6px"><div class="strip"></div>' +
+      '<div class="label">Поддержка · Хабар</div>' +
+      '<div class="cname" style="margin:4px 0 8px">Напиши нам</div>' +
+      '<div class="hint" style="text-align:left;padding:0 0 12px">Сообщи о проблеме, задай вопрос или предложи идею — сообщение придёт напрямую создателю приложения.</div>' +
+      '<textarea id="suptext" placeholder="Твоё сообщение…" maxlength="2000" style="width:100%;height:130px;resize:none;background:var(--well);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:14px;line-height:1.5;padding:12px;outline:none"></textarea>' +
+      '<div class="btns" style="margin-top:10px"><button class="btn fill" id="supsend">📨 Отправить</button></div>' +
+      '<div id="supres"></div>' +
+    '</div>';
+  const send = $('#supsend'), res = $('#supres');
+  send.onclick = async () => {
+    const t = ($('#suptext').value || '').trim();
+    if (t.length < 3) { res.innerHTML = '<div class="hint" style="text-align:left;padding:8px 0 0;color:var(--red)">Напиши сообщение — хотя бы пару слов.</div>'; return; }
+    send.disabled = true; send.textContent = 'Отправляю…';
+    try {
+      const r = await srv('/support', {text: t});
+      if (!r || !r.ok) throw new Error('no-ok');
+      if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
+      view.querySelector('.card').innerHTML = '<div class="strip"></div>' +
+        '<div class="signal" style="background:var(--green-bg)"><i style="background:var(--green)"></i><b style="color:var(--green)">✅ Отправлено! Спасибо — мы всё прочитаем.</b></div>';
+    } catch(e) {
+      send.disabled = false; send.textContent = '📨 Отправить';
+      res.innerHTML = '<div class="hint" style="text-align:left;padding:8px 0 0;color:var(--red)">Не отправилось 😕 Попробуй ещё раз.</div>';
+    }
+  };
+}
+
 function markActiveTab() {
   document.querySelectorAll('.navitem').forEach(x =>
     x.classList.toggle('on', x.dataset.tab === tab));

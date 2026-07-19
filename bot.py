@@ -1265,7 +1265,7 @@ async def main():
 
     if API_ENABLED:
         from web_api import start_api
-        await start_api()
+        await start_api(bot)
         asyncio.get_running_loop().create_task(warm_profiles())
 
     log.info("Бот запущен")

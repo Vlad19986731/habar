@@ -6,6 +6,7 @@
 """
 import hashlib
 import hmac
+import html
 import json
 import logging
 import time
@@ -14,10 +15,11 @@ from urllib.parse import parse_qsl
 from aiohttp import web
 
 import db
-from config import (API_PORT, BOT_TOKEN, BOT_USERNAME, EARLY_BIRD_DAYS,
-                    REF_BONUS_DAYS)
+from config import (ADMIN_IDS, API_PORT, BOT_TOKEN, BOT_USERNAME,
+                    EARLY_BIRD_DAYS, REF_BONUS_DAYS)
 
 log = logging.getLogger("dfbot.api")
+_bot = None   # Bot для отправки в поддержку (ставится в start_api)
 
 # initData считаем свежим сутки — дальше требуем переоткрыть приложение
 MAX_AUTH_AGE = 86400
@@ -201,7 +203,32 @@ async def api_series(request, u):
     return web.json_response({"prices": [{"timestamp": ts, "priceAvg": price} for ts, price in rows]})
 
 
-async def start_api() -> None:
+@routes.post("/api/support")
+@need_auth
+async def api_support(request, u):
+    """Сообщение в поддержку — падает напрямую админам (владельцу) в Telegram."""
+    body = await request.json()
+    msg = (body.get("text") or "").strip()
+    if not msg or len(msg) > 2000:
+        return web.json_response({"error": "bad_request"}, status=400)
+    uname = "@" + u["username"] if u.get("username") else "(без ника)"
+    text = ("📩 <b>Поддержка Хабар</b>\n"
+            "От: " + html.escape(u.get("first_name") or "") + " " + html.escape(uname) +
+            " · id <code>" + str(u["id"]) + "</code>\n\n" + html.escape(msg))
+    ok = False
+    if _bot:
+        for aid in ADMIN_IDS:
+            try:
+                await _bot.send_message(aid, text)
+                ok = True
+            except Exception:
+                log.exception("Поддержка: не смог отправить админу %s", aid)
+    return web.json_response({"ok": ok})
+
+
+async def start_api(bot=None) -> None:
+    global _bot
+    _bot = bot
     app = web.Application()
     app.add_routes(routes)
     runner = web.AppRunner(app, access_log=None)
