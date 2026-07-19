@@ -369,6 +369,34 @@
   .mpnew{position:absolute; top:9px; right:9px; font-family:var(--mono); font-size:8.5px; font-weight:800; letter-spacing:.1em; background:var(--amber); color:#1a1204; padding:2px 6px; border-radius:4px}
   .mphint{color:var(--text2); font-size:12px; text-align:center; margin:11px 4px 2px; min-height:16px}
   .mphint b{color:var(--orange)}
+
+  /* ---------- рынок: новый вид (v2a), системные шрифты, токены приложения ---------- */
+  .mkt-hdr{display:flex; align-items:center; justify-content:space-between; margin:2px 0 16px}
+  .mkt-title{font-size:27px; font-weight:800; letter-spacing:3px; text-transform:uppercase; line-height:1}
+  .mkt-title span{color:var(--orange); margin-left:6px; font-size:22px}
+  .mkt-live{font-family:var(--mono); font-size:9px; color:var(--orange); border:1px solid #234534; padding:4px 8px; letter-spacing:1px}
+  .mkt-search{display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid #223028; padding:11px 14px; margin-bottom:20px;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px)}
+  .mkt-search input{flex:1; min-width:0; background:none; border:none; outline:none; color:var(--text); font-family:var(--mono); font-size:12px; -webkit-appearance:none; appearance:none}
+  .mkt-search input::placeholder{color:var(--text2)}
+  .mkt-search input::-webkit-search-cancel-button{display:none}
+  .mkt-diamond{width:8px; height:8px; flex:none; background:var(--orange); clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+  .mkt-sec{display:flex; align-items:center; gap:10px; margin:0 0 10px}
+  .mkt-sec span{font-family:var(--mono); font-size:10px; color:var(--orange); letter-spacing:2px}
+  .mkt-sec::after{content:""; flex:1; height:1px; background:linear-gradient(90deg,#223028,transparent)}
+  .mkt-sec + .list{margin-bottom:22px}
+  .mkt-tiles{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+  .mkt-tile{position:relative; overflow:hidden; background:var(--surface); border:1px solid var(--border); height:64px; cursor:pointer; display:block; width:100%; padding:0; font:inherit; color:inherit; text-align:left}
+  .mkt-tile:active,.mkt-tile:hover{border-color:var(--orange)}
+  .mkt-tp{position:absolute; right:0; top:0; bottom:0; width:38%; display:flex; align-items:center; justify-content:center; font-size:24px;
+    clip-path:polygon(22px 0,100% 0,100% 100%,0 100%);
+    background:repeating-linear-gradient(45deg,#16201a,#16201a 4px,#111a14 4px,#111a14 8px)}
+  .mkt-stripe{position:absolute; right:calc(38% - 13px); top:-6px; bottom:-6px; width:4px; background:var(--orange);
+    transform:skewX(-20deg); animation:mktStripe 2.2s ease-in-out infinite}
+  .mkt-tl{position:absolute; left:12px; top:0; bottom:0; width:56%; display:flex; flex-direction:column; justify-content:center}
+  .mkt-tn{font-weight:800; font-size:14px; letter-spacing:.4px; text-transform:uppercase; line-height:1.08}
+  .mkt-tc{font-family:var(--mono); font-size:9px; color:var(--orange); margin-top:4px}
+  @keyframes mktStripe{0%,100%{opacity:.55; box-shadow:0 0 6px 1px rgba(15,247,150,.35)} 50%{opacity:1; box-shadow:0 0 14px 3px rgba(15,247,150,.7)}}
 </style>
 </head>
 <body>
@@ -738,8 +766,9 @@ async function fillPrices(ids, withTrend) {
 let tab = 'home', lastQ = '';
 
 function marketHeader() {
-  return '<div class="mkttitle">Рынок<span>₮</span></div>' +
-    '<input class="search" id="q" type="search" placeholder="Поиск: вектор, дигл, gold…" autocomplete="off" value="' + lastQ.replace(/"/g,'&quot;') + '">';
+  return '<div class="mkt-hdr"><div class="mkt-title">Рынок<span>₮</span></div><div class="mkt-live">LIVE</div></div>' +
+    '<div class="mkt-search"><span class="mkt-diamond"></span>' +
+    '<input id="q" type="search" placeholder="Поиск: вектор, дигл, gold…" autocomplete="off" value="' + lastQ.replace(/"/g,'&quot;') + '"></div>';
 }
 
 let catFilter = null;
@@ -800,7 +829,7 @@ function renderMarket() {
   const results = lastQ.trim().length >= 2 ? searchCatalog(lastQ) : null;
   if (results && results.length) {
     view.innerHTML = marketHeader() +
-      '<div class="label sect">Найдено · ' + results.length + '</div>' +
+      '<div class="mkt-sec"><span>// НАЙДЕНО · ' + results.length + '</span></div>' +
       '<div class="list">' + results.map(it => rowHtml(it)).join('') + '</div>';
     bindSearch(); updWipe();
     fillPrices(results.map(i=>i.id), false);
@@ -831,13 +860,14 @@ function renderMarket() {
     .map(id => CATALOG.find(i => i.id === id)).filter(Boolean).slice(0, 3);
   let body = '';
   if (recent.length) {
-    body += '<div class="label sect">Недавние</div><div class="list">' + recent.map(it => rowHtml(it)).join('') + '</div>';
+    body += '<div class="mkt-sec"><span>// НЕДАВНИЕ</span></div><div class="list">' + recent.map(it => rowHtml(it)).join('') + '</div>';
   }
-  body += '<div class="label sect">Категории</div><div class="catgrid">' +
+  body += '<div class="mkt-sec"><span>// КАТЕГОРИИ</span></div><div class="mkt-tiles">' +
     CATS.filter(c => counts[c[0]]).map(c =>
-      '<button class="catcard" data-cat="' + c[0] + '">' +
-      '<span class="ce">' + c[2] + '</span>' +
-      '<span><b>' + c[1] + '</b><span class="cnt num">' + fmt(counts[c[0]]) + ' предм.</span></span>' +
+      '<button class="mkt-tile" data-cat="' + c[0] + '">' +
+      '<span class="mkt-tp">' + c[2] + '</span><span class="mkt-stripe"></span>' +
+      '<span class="mkt-tl"><span class="mkt-tn">' + c[1].replace(/ и .*/, '') + '</span>' +
+      '<span class="mkt-tc">' + fmt(counts[c[0]]) + ' ПРЕДМ.</span></span>' +
       '</button>').join('') + '</div>';
   view.innerHTML = marketHeader() + body;
   bindSearch(); updWipe();
