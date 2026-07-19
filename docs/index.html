@@ -1549,6 +1549,12 @@ function profClear() {
   localStorage.removeItem('dfprofile');
   if (cloudOk()) { try { tg.CloudStorage.removeItem('dfprofile', ()=>{}); } catch(e){} }
 }
+// отвязать текущий аккаунт и вернуться к вводу нового ника
+async function dfChangeNick() {
+  profClear();
+  try { await srv('/profile', {player_id: null}); } catch(e){}
+  renderMore();
+}
 
 async function loadProfileData(prof) {
   const box = document.getElementById('stashbox');
@@ -1587,7 +1593,8 @@ async function loadProfileData(prof) {
     const down = /\b5\d\d\b/.test(String((e && e.message) || ''));   // 5xx — авария на стороне поставщика данных
     html = '<div class="hint" style="text-align:left;padding:4px 0 0">' + (down
       ? '📡 Аккаунт на трекинге. Сейчас у поставщика данных перебои на их стороне — как только починят, стоимость стэша и график появятся здесь автоматически.'
-      : '📡 Аккаунт на трекинге — сервер опрашивает его каждый час. Стэш появится здесь, как только поставщик данных его рассчитает.') + '</div>';
+      : '📡 Аккаунт на трекинге — сервер опрашивает его каждый час. Стэш появится здесь, как только поставщик данных его рассчитает.<br><span style="color:var(--text3)">Не тот аккаунт или ошибся в нике?</span>') + '</div>' +
+      '<div class="btns" style="margin-top:10px"><button class="btn" onclick="dfChangeNick()">Указать другой ник</button></div>';
   }
   try {
     const st = await api('GetPlayerOperationStats', {playerId: prof.id});
@@ -1670,11 +1677,7 @@ function renderMore() {
   loadProBox();
 
   if (prof) {
-    $('#dfunlink').onclick = async () => {
-      profClear();
-      try { await srv('/profile', {player_id: null}); } catch(e){}
-      renderMore();
-    };
+    $('#dfunlink').onclick = dfChangeNick;
     loadProfileData(prof);
   } else {
     $('#dflink').onclick = async () => {
