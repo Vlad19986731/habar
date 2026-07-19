@@ -819,6 +819,16 @@ function startInfiniteList(items) {
 window.addEventListener('scroll', maybeLoadMore, {passive: true});
 view.addEventListener('scroll', maybeLoadMore, {passive: true});
 
+// иконка в плитке не загрузилась — пробуем следующий предмет категории с фото; эмодзи только если все битые
+function mktNextIcon(img) {
+  try {
+    const list = (renderMarket._picsList || {})[img.dataset.cat] || [];
+    const idx = (+img.dataset.idx || 0) + 1;
+    if (idx < list.length) { img.dataset.idx = idx; img.src = list[idx]; }
+    else img.remove();
+  } catch (e) { img.remove(); }
+}
+
 function renderMarket() {
   stopInfiniteList();
   if (!CATALOG.length) {
@@ -864,23 +874,28 @@ function renderMarket() {
   if (recent.length) {
     body += '<div class="mkt-sec"><span>// НЕДАВНИЕ</span></div><div class="list">' + recent.map(it => rowHtml(it)).join('') + '</div>';
   }
-  // фото плитки: случайный предмет категории (иконка), кэш на сессию; эмодзи — запасной вариант
-  if (!renderMarket._pics) renderMarket._pics = {};
-  const tileIcon = cat => {
-    if (renderMarket._pics[cat]) return renderMarket._pics[cat];
-    const pool = CATALOG.filter(i => i.cat === cat && i.icon);
-    if (pool.length) renderMarket._pics[cat] = pool[Math.floor(Math.random() * pool.length)].icon;
-    return renderMarket._pics[cat] || '';
+  // фото плитки: перемешанный список ВСЕХ предметов категории с иконкой (кэш на сессию),
+  // перебираем по onerror — гарантированно покажем фото, пока есть хоть одна рабочая картинка
+  if (!renderMarket._picsList) renderMarket._picsList = {};
+  const iconList = cat => {
+    if (!renderMarket._picsList[cat]) {
+      const pool = CATALOG.filter(i => i.cat === cat && i.icon).map(i => i.icon);
+      for (let k = pool.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); const t = pool[k]; pool[k] = pool[j]; pool[j] = t; }
+      renderMarket._picsList[cat] = pool;
+    }
+    return renderMarket._picsList[cat];
   };
   body += '<div class="mkt-sec"><span>// КАТЕГОРИИ</span></div><div class="mkt-tiles">' +
-    CATS.filter(c => counts[c[0]]).map(c =>
-      '<button class="mkt-tile" data-cat="' + c[0] + '">' +
-      '<span class="mkt-tp"><span class="mkt-emoji">' + c[2] + '</span>' +
-        (tileIcon(c[0]) ? '<img class="mkt-photo" loading="lazy" decoding="async" src="' + tileIcon(c[0]) + '" alt="" onerror="this.remove()">' : '') +
-      '</span><span class="mkt-stripe"></span>' +
-      '<span class="mkt-tl"><span class="mkt-tn">' + c[1].replace(/ и .*/, '') + '</span>' +
-      '<span class="mkt-tc">' + fmt(counts[c[0]]) + ' ПРЕДМ.</span></span>' +
-      '</button>').join('') + '</div>';
+    CATS.filter(c => counts[c[0]]).map(c => {
+      const icons = iconList(c[0]);
+      return '<button class="mkt-tile" data-cat="' + c[0] + '">' +
+        '<span class="mkt-tp"><span class="mkt-emoji">' + c[2] + '</span>' +
+          (icons.length ? '<img class="mkt-photo" loading="lazy" decoding="async" src="' + icons[0] + '" data-cat="' + c[0] + '" data-idx="0" alt="" onerror="mktNextIcon(this)">' : '') +
+        '</span><span class="mkt-stripe"></span>' +
+        '<span class="mkt-tl"><span class="mkt-tn">' + c[1].replace(/ и .*/, '') + '</span>' +
+        '<span class="mkt-tc">' + fmt(counts[c[0]]) + ' ПРЕДМ.</span></span>' +
+        '</button>';
+    }).join('') + '</div>';
   view.innerHTML = marketHeader() + body;
   bindSearch(); updWipe();
   if (recent.length) fillPrices(recent.map(i=>i.id), false);
