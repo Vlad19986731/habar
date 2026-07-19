@@ -21,6 +21,9 @@ from config import (ADMIN_IDS, API_PORT, BOT_TOKEN, BOT_USERNAME,
 log = logging.getLogger("dfbot.api")
 _bot = None   # Bot для отправки в поддержку (ставится в start_api)
 
+# допустимые id карт для голосования (защита от мусора в запросе)
+MAP_IDS = {"zero", "space", "layali", "brak", "tide", "az3"}
+
 # initData считаем свежим сутки — дальше требуем переоткрыть приложение
 MAX_AUTH_AGE = 86400
 
@@ -225,6 +228,25 @@ async def api_support(request, u):
             except Exception:
                 log.exception("Поддержка: не смог отправить админу %s", aid)
     return web.json_response({"ok": ok})
+
+
+@routes.post("/api/vote")
+@need_auth
+async def api_vote(request, u):
+    """Голос за лучшую карту. Один на пользователя, повторный тап меняет выбор."""
+    body = await request.json()
+    m = (body.get("map") or "").strip()
+    if m not in MAP_IDS:
+        return web.json_response({"error": "bad_request"}, status=400)
+    await db.set_map_vote(u["id"], m)
+    return web.json_response({"ok": True})
+
+
+@routes.get("/api/poll")
+@need_auth
+async def api_poll(request, u):
+    """Только СВОЙ голос — суммы наружу не отдаём (счётчики скрыты). Расклад видит админ в /stats."""
+    return web.json_response({"my": await db.get_map_vote(u["id"])})
 
 
 async def start_api(bot=None) -> None:

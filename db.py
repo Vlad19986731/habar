@@ -48,6 +48,12 @@ CREATE TABLE IF NOT EXISTS stash_history (
     value     REAL NOT NULL,
     PRIMARY KEY (player_id, ts)
 );
+-- голосование «лучшая карта» (счётчики скрыты в приложении; один голос на юзера)
+CREATE TABLE IF NOT EXISTS map_votes (
+    tg_id INTEGER PRIMARY KEY,
+    map   TEXT NOT NULL,
+    ts    TEXT DEFAULT (datetime('now'))
+);
 """
 
 
@@ -164,6 +170,34 @@ async def user_stats() -> dict:
             "with_alerts": await one("SELECT COUNT(DISTINCT tg_id) FROM alerts WHERE active=1"),
             "with_favs": await one("SELECT COUNT(DISTINCT tg_id) FROM watchlist"),
         }
+
+
+# ---------- голосование «лучшая карта» ----------
+
+async def set_map_vote(tg_id: int, map_id: str) -> None:
+    """Один голос на пользователя; повторный тап меняет выбор."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO map_votes(tg_id, map, ts) VALUES(?,?,datetime('now')) "
+            "ON CONFLICT(tg_id) DO UPDATE SET map=excluded.map, ts=datetime('now')",
+            (tg_id, map_id),
+        )
+        await db.commit()
+
+
+async def get_map_vote(tg_id: int) -> str | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT map FROM map_votes WHERE tg_id=?", (tg_id,))
+        row = await cur.fetchone()
+        return row[0] if row else None
+
+
+async def map_vote_tally() -> list[tuple]:
+    """Расклад голосов для админа: [(map, count), ...] по убыванию."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT map, COUNT(*) FROM map_votes GROUP BY map ORDER BY COUNT(*) DESC")
+        return await cur.fetchall()
 
 
 # ---------- PRO ----------

@@ -264,8 +264,17 @@ async def cmd_stats(m: Message):
         f"🔔 Следят за ценой: <b>{s['with_alerts']}</b>",
         f"⭐ С избранным: <b>{s['with_favs']}</b>",
         f"🚫 Заблокировали бота: <b>{s['blocked']}</b>",
-        "\n<b>Последние активные:</b>",
     ]
+    MAP_NAMES = {"zero": "Плотина Зеро", "space": "Космический город", "layali": "Роща Лаяли",
+                 "brak": "Брекеш", "tide": "Тюрьма «Прилив»", "az3": "АЭС AZ3"}
+    tally = await db.map_vote_tally()
+    lines.append("\n<b>🗺 Голоса за карту:</b>")
+    if tally:
+        for mid, cnt in tally:
+            lines.append(f"• {MAP_NAMES.get(mid, mid)}: <b>{cnt}</b>")
+    else:
+        lines.append("• пока нет голосов")
+    lines.append("\n<b>Последние активные:</b>")
     for tg_id, uname, fname, seen, cnt, df_name in await db.recent_users(8):
         who = ("@" + uname) if uname else (fname or str(tg_id))
         game = f" · 🎮 {df_name}" if df_name else ""
