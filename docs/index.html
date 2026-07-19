@@ -874,14 +874,20 @@ function renderMarket() {
   if (recent.length) {
     body += '<div class="mkt-sec"><span>// НЕДАВНИЕ</span></div><div class="list">' + recent.map(it => rowHtml(it)).join('') + '</div>';
   }
-  // фото плитки: перемешанный список ВСЕХ предметов категории с иконкой (кэш на сессию),
-  // перебираем по onerror — гарантированно покажем фото, пока есть хоть одна рабочая картинка
+  // фото плитки: «главный» предмет категории закреплён в localStorage — та же иконка между сессиями,
+  // значит попадание в кэш браузера (без перезагрузки/мигания). Остальные предметы — фолбэк на битую картинку.
   if (!renderMarket._picsList) renderMarket._picsList = {};
+  let tilePin = {};
+  try { tilePin = JSON.parse(localStorage.getItem('mkt_tilepics') || '{}'); } catch(e){}
   const iconList = cat => {
     if (!renderMarket._picsList[cat]) {
       const pool = CATALOG.filter(i => i.cat === cat && i.icon).map(i => i.icon);
-      for (let k = pool.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); const t = pool[k]; pool[k] = pool[j]; pool[j] = t; }
-      renderMarket._picsList[cat] = pool;
+      let primary = tilePin[cat];
+      if (!primary || pool.indexOf(primary) < 0) {          // нет закреплённой или предмет пропал — выбрать и запомнить
+        primary = pool.length ? pool[Math.floor(Math.random() * pool.length)] : '';
+        if (primary) { tilePin[cat] = primary; try { localStorage.setItem('mkt_tilepics', JSON.stringify(tilePin)); } catch(e){} }
+      }
+      renderMarket._picsList[cat] = primary ? [primary].concat(pool.filter(u => u !== primary)) : pool;
     }
     return renderMarket._picsList[cat];
   };
