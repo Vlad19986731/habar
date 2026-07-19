@@ -859,31 +859,41 @@ async function openItem(id) {
 
   openItem._gen = (openItem._gen || 0) + 1;
   const myGen = openItem._gen;
+  if (openItem._tick) clearInterval(openItem._tick);
+  openItem._scrub = false; openItem._lastPrice = null;
   // 1) МГНОВЕННО из кэша (prices.json уже в памяти) — карточка открывается сразу, без ожидания чужого API
   const cch = (PRICES && PRICES[id]) || [];
   const cachedP = {price: cch[0] || 0, referencePrice: cch[1] || 0};
   await paintCard(it, id, cachedP, [], {ch24: (cch[2] == null ? null : cch[2]), live: false});
-  // 2) ГРАФИК из НАШЕЙ истории (быстро, надёжно) — рисуем СРАЗУ, не дожидаясь чужого API
+  // 2) ГРАФИК из НАШЕЙ истории (быстро) — рисуем СРАЗУ, не дожидаясь чужого API
+  let hAvgs = [], hTimes = [];
   try {
     const ser = await srv('/series', {item_id: id});
     if (openItem._gen !== myGen) return;                 // юзер уже переоткрыл/ушёл
+    const spts = ((ser && ser.prices) || []).filter(x => x.priceAvg);
+    hAvgs = spts.map(x => x.priceAvg); hTimes = spts.map(x => x.timestamp);
     const alp = document.getElementById('alpick');
-    if (!(alp && alp.children.length)) {                 // не сбиваем открытый выбор порога
-      const spts = ((ser && ser.prices) || []).filter(x => x.priceAvg);
-      await paintCard(it, id, cachedP, spts.map(x => x.priceAvg), {live: true, times: spts.map(x => x.timestamp)});
-    }
+    if (!(alp && alp.children.length)) await paintCard(it, id, cachedP, hAvgs, {live: true, times: hTimes});
   } catch(e) { /* остаётся мгновенная кэш-карточка */ }
-  // 3) ЖИВАЯ цена из чужого API — ОТДЕЛЬНО, фоном; график её НЕ ждёт, обновляем только цену
-  try {
-    const pr = await api('GetAuctionItemPrice', {auctionItemId: id});
-    if (openItem._gen !== myGen) return;
-    if (pr && pr.price) {
-      const bp = document.getElementById('bigp');
-      if (bp) bp.innerHTML = fmt(pr.price) + ' <span>₮</span>';
-      const sl = document.getElementById('srcline');
-      if (sl) sl.textContent = 'Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com';
-    }
-  } catch(e) {}
+  // 3) ЖИВОЙ КОНЧИК: текущая цена — последней точкой + тикер каждые 30с, пока карточка открыта
+  const applyLive = async () => {
+    let pr = null;
+    try { pr = await api('GetAuctionItemPrice', {auctionItemId: id}); } catch(e) { return; }
+    if (openItem._gen !== myGen) { clearInterval(openItem._tick); return; }
+    if (!pr || !pr.price || pr.price === openItem._lastPrice) return;   // цена не изменилась — не мигаем
+    openItem._lastPrice = pr.price;
+    const bp = document.getElementById('bigp'); if (bp) bp.innerHTML = fmt(pr.price) + ' <span>₮</span>';
+    const sl = document.getElementById('srcline');
+    if (sl) sl.textContent = 'Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · live';
+    const alp = document.getElementById('alpick');
+    if (hAvgs.length && !openItem._scrub && !(alp && alp.children.length))
+      await paintCard(it, id, pr.price, hAvgs.concat(pr.price), {live: true, times: hTimes.concat(new Date().toISOString())});
+  };
+  await applyLive();
+  openItem._tick = setInterval(() => {
+    if (openItem._gen !== myGen || !document.getElementById('bigp')) { clearInterval(openItem._tick); return; }
+    applyLive();
+  }, 30000);
 }
 
 async function paintCard(it, id, p, avgs, opts) {
@@ -980,8 +990,9 @@ async function paintCard(it, id, p, avgs, opts) {
         chtip.querySelector('.v').textContent = fmt(v) + ' ₮';
         chtip.querySelector('.d').textContent = times[i] ? fmtT(times[i]) : '';
       };
-      const chHide = () => { chx.style.opacity = 0; chdot.style.opacity = 0; chtip.style.opacity = 0; };
+      const chHide = () => { openItem._scrub = false; chx.style.opacity = 0; chdot.style.opacity = 0; chtip.style.opacity = 0; };
       const chMove = e => {
+        openItem._scrub = true;
         const r = cw.getBoundingClientRect();
         const px = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
         chShow(Math.max(0, Math.min(avgs.length - 1, Math.round(px / r.width * (avgs.length - 1)))));

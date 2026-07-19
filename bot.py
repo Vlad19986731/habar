@@ -1249,7 +1249,7 @@ async def main():
     scheduler.add_job(collect_and_check, "interval", minutes=COLLECT_EVERY_MIN, args=[bot])
     scheduler.add_job(warm_profiles, "interval", minutes=WARM_EVERY_MIN)
     scheduler.add_job(credit_referrals, "interval", minutes=30, args=[bot])
-    scheduler.add_job(market_snapshot, "interval", hours=1, args=[bot])
+    scheduler.add_job(market_snapshot, "interval", minutes=30, args=[bot])
     scheduler.add_job(db.history_cleanup, "interval", hours=24)
     scheduler.add_job(send_daily_digest, "cron", hour=16, minute=0, args=[bot])  # 19:00 МСК
     scheduler.start()
