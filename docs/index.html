@@ -1582,7 +1582,10 @@ async function loadProfileData(prof) {
       '<div class="bigprice num" style="font-size:24px;margin-top:6px">' + fmt(val) + ' <span style="color:var(--orange)">₮</span></div>' +
       (hist.length > 1 ? chartSvg(hist, 320, 56) + '<div class="chart-meta"><span>ДИНАМИКА</span><span>30 ДНЕЙ</span></div>' : '');
   } catch(e) {
-    html = '<div class="hint" style="text-align:left;padding:4px 0 0">📡 Сервер взял твой аккаунт на трекинг и опрашивает его каждый час. Данные о стэше появятся здесь автоматически — обычно в течение суток.</div>';
+    const down = /\b5\d\d\b/.test(String((e && e.message) || ''));   // 5xx — авария на стороне поставщика данных
+    html = '<div class="hint" style="text-align:left;padding:4px 0 0">' + (down
+      ? '📡 Аккаунт на трекинге. Сейчас у поставщика данных перебои на их стороне — как только починят, стоимость стэша и график появятся здесь автоматически.'
+      : '📡 Аккаунт на трекинге — сервер опрашивает его каждый час. Стэш появится здесь, как только поставщик данных его рассчитает.') + '</div>';
   }
   try {
     const st = await api('GetPlayerOperationStats', {playerId: prof.id});
