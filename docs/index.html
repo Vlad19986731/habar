@@ -1556,41 +1556,61 @@ async function dfChangeNick() {
   renderMore();
 }
 
+// компактно: 1 050 980 791 -> «1,05 млрд» (для узких плиток разбивки)
+function stashShort(n) {
+  n = Number(n) || 0;
+  if (n >= 1e9) return (n / 1e9).toFixed(2).replace('.', ',') + ' млрд';
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace('.', ',') + ' млн';
+  if (n >= 1e3) return Math.round(n / 1e3) + ' тыс';
+  return String(Math.round(n));
+}
+
 async function loadProfileData(prof) {
   const box = document.getElementById('stashbox');
   if (!box) return;
   let html = '';
-  // сначала пробуем НАШУ историю (её копит сервер — она надёжнее чужого API)
+  let br = null;                       // разбивка стэша: {net, liquid, collection}
+  let hist = [], ourData = false, apiErr = null;
+
+  // 1) живой стэш из API — единственный источник ПОЛНОЙ разбивки (ликвидные/коллекция)
+  try {
+    const sv = await api('GetPlayerOperationStashValue', {playerId: prof.id});   // {"stash":{"assetsNet":...}}
+    const st = (sv && sv.stash) || sv || {};
+    const net = Number(st.assetsNet);
+    if (isFinite(net)) br = {net: net, liquid: Number(st.assetsLiquid) || 0, collection: Number(st.assetsCollection) || 0};
+  } catch(e) { apiErr = e; }
+
+  // 2) наша история — приоритет для графика (её копит сервер); и запас для числа, если живой не ответил
   try {
     const mine = await srv('/stash');
-    if (mine && mine.last) {
-      html = '<div class="label">Стоимость стэша · live</div>' +
-        '<div class="bigprice num" style="font-size:24px;margin-top:6px">' + fmt(mine.last) + ' <span style="color:var(--orange)">₮</span></div>' +
-        (mine.values.length > 1 ? chartSvg(mine.values, 320, 56) + '<div class="chart-meta"><span>ДИНАМИКА · НАШИ ДАННЫЕ</span><span>30 ДНЕЙ</span></div>' : '');
-      const box2 = document.getElementById('stashbox');
-      if (box2) box2.innerHTML = html;
-      return;
-    }
+    if (mine && mine.values && mine.values.length) { hist = mine.values; ourData = true; }
+    if (!br && mine && mine.last) br = {net: mine.last, liquid: 0, collection: 0};   // только число, без разбивки
   } catch(e){}
-  try {
-    const sv = await api('GetPlayerOperationStashValue', {playerId: prof.id});
-    const st = (sv && sv.stash) || sv || {};                       // {"stash":{"assetsNet":"...",...}}
-    let val = Number(st.assetsNet != null ? st.assetsNet : st.assetsLiquid);
-    if (!isFinite(val)) val = null;
-    let hist = [];
+
+  // мало точек у нас — берём живую историю API
+  if (br && hist.length < 2) {
     try {
       const h = await api('GetPlayerOperationHistoricalStashValue',
         {playerId: prof.id, startTime: new Date(Date.now() - 30 * 864e5).toISOString().slice(0,13) + ':00:00Z'});
-      const arr = h.stashes || h.values || [];                     // {"stashes":[{"assetsNet":"...","createdAt":...}]}
-      hist = arr.map(x => Number(x && x.assetsNet != null ? x.assetsNet : x)).filter(x => isFinite(x));
+      const lh = (h.stashes || h.values || []).map(x => Number(x && x.assetsNet != null ? x.assetsNet : x)).filter(x => isFinite(x));
+      if (lh.length > hist.length) { hist = lh; ourData = false; }
     } catch(e){}
-    if (val === null && hist.length) val = hist[hist.length - 1];
-    if (val === null || val === undefined) throw new Error('нет данных');
+  }
+
+  if (br) {
     html = '<div class="label">Стоимость стэша · live</div>' +
-      '<div class="bigprice num" style="font-size:24px;margin-top:6px">' + fmt(val) + ' <span style="color:var(--orange)">₮</span></div>' +
-      (hist.length > 1 ? chartSvg(hist, 320, 56) + '<div class="chart-meta"><span>ДИНАМИКА</span><span>30 ДНЕЙ</span></div>' : '');
-  } catch(e) {
-    const down = /\b5\d\d\b/.test(String((e && e.message) || ''));   // 5xx — авария на стороне поставщика данных
+      '<div class="bigprice num" style="font-size:24px;margin-top:6px">' + fmt(br.net) + ' <span style="color:var(--orange)">₮</span></div>';
+    if (br.liquid || br.collection) {   // разбивка есть только когда ответил живой API
+      const cells = [['Ликвидные', br.liquid], ['Коллекция', br.collection], ['Итого', br.net + br.collection]];
+      html += '<div style="display:flex;gap:8px;margin-top:12px">' + cells.map(c =>
+        '<div style="flex:1;background:var(--well);border:1px solid var(--border);padding:10px 6px;text-align:center;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)">' +
+        '<div style="color:var(--white);font-size:15px;font-weight:800" class="num">' + stashShort(c[1]) + '</div>' +
+        '<div style="color:var(--text3);font-size:8.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;margin-top:3px;font-family:var(--mono)">' + c[0] + '</div></div>').join('') + '</div>';
+    }
+    if (hist.length > 1) html += chartSvg(hist, 320, 56) +
+      '<div class="chart-meta"><span>ДИНАМИКА' + (ourData ? ' · НАШИ ДАННЫЕ' : '') + '</span><span>30 ДНЕЙ</span></div>';
+  } else {
+    const down = /\b5\d\d\b/.test(String((apiErr && apiErr.message) || ''));   // 5xx — авария поставщика
     html = '<div class="hint" style="text-align:left;padding:4px 0 0">' + (down
       ? '📡 Аккаунт на трекинге. Сейчас у поставщика данных перебои на их стороне — как только починят, стоимость стэша и график появятся здесь автоматически.'
       : '📡 Аккаунт на трекинге — сервер опрашивает его каждый час. Стэш появится здесь, как только поставщик данных его рассчитает.<br><span style="color:var(--text3)">Не тот аккаунт или ошибся в нике?</span>') + '</div>' +
