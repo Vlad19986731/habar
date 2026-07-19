@@ -513,7 +513,11 @@ async function loadCatalog() {
       items = items.concat(d.items || []);
       token = d.nextPageToken;
     } while (token);
-    CATALOG = items.map(i => ({id:i.id, name:i.name, icon:i.iconUrl, lc:i.name.toLowerCase()}));
+    CATALOG = items.map(i => {
+      // иконку раздаём со СВОЕГО сервера (icons/<gameId>.png); если её там нет — фолбэк на их CDN (см. слушатель error ниже)
+      const g = (String(i.iconUrl || '').match(/auction-item\/(\d+)\//) || [])[1];
+      return {id:i.id, name:i.name, icon: g ? 'icons/' + g + '.png' : (i.iconUrl || ''), lc:i.name.toLowerCase()};
+    });
     localStorage.setItem('cat_v1', JSON.stringify({ts:Date.now(), items:CATALOG}));
   } catch(e) {
     // сеть легла — работаем на устаревшем кэше, это лучше чем ничего
@@ -824,7 +828,7 @@ function mktNextIcon(img) {
   try {
     const list = (renderMarket._picsList || {})[img.dataset.cat] || [];
     const idx = (+img.dataset.idx || 0) + 1;
-    if (idx < list.length) { img.dataset.idx = idx; img.src = list[idx]; }
+    if (idx < list.length) { img.dataset.idx = idx; delete img.dataset.cdnfb; img.src = list[idx]; }
     else img.remove();
   } catch (e) { img.remove(); }
 }
@@ -1770,11 +1774,28 @@ function proShell(inner) {
 // как только иконка предмета загрузилась — прячем буквенную заглушку под ней
 document.addEventListener('load', e => {
   const img = e.target;
-  if (img.tagName === 'IMG' && img.parentElement &&
-      (img.parentElement.classList.contains('well') || img.parentElement.classList.contains('well-lg'))) {
-    const ab = img.parentElement.querySelector('.ab');
+  if (img.tagName !== 'IMG') return;
+  const p = img.parentElement;
+  if (p && (p.classList.contains('well') || p.classList.contains('well-lg'))) {
+    const ab = p.querySelector('.ab');
     if (ab) ab.style.display = 'none';
   }
+  // фото предмета легло в плитку категории — прячем эмодзи, чтобы не просвечивало из-под прозрачной иконки
+  if (img.classList.contains('mkt-photo') && p) {
+    const em = p.querySelector('.mkt-emoji');
+    if (em) em.style.display = 'none';
+  }
+}, true);
+
+// локальной иконки нет (icons/<id>.png отдал 404) — один раз пробуем их CDN, не давая инлайновому onerror удалить картинку
+document.addEventListener('error', e => {
+  const img = e.target;
+  if (img.tagName !== 'IMG' || img.dataset.cdnfb) return;
+  const m = /\/icons\/(\d+)\.png(\?|$)/.exec(img.src || '');
+  if (!m) return;
+  img.dataset.cdnfb = '1';
+  e.stopPropagation();
+  img.src = 'https://cdn.deltaforceapi.com/deltaforceapi/auction-item/' + m[1] + '/icon.png';
 }, true);
 
 view.addEventListener('click', e => {
