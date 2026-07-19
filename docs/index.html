@@ -880,14 +880,16 @@ async function openItem(id) {
     let pr = null;
     try { pr = await api('GetAuctionItemPrice', {auctionItemId: id}); } catch(e) { return; }
     if (openItem._gen !== myGen) { clearInterval(openItem._tick); return; }
-    if (!pr || !pr.price || pr.price === openItem._lastPrice) return;   // цена не изменилась — не мигаем
-    openItem._lastPrice = pr.price;
-    const bp = document.getElementById('bigp'); if (bp) bp.innerHTML = fmt(pr.price) + ' <span>₮</span>';
+    const po = pr && pr.price;              // объект {price, referencePrice}
+    const lp = po && po.price;              // САМО число цены (было вложено — отсюда NaN и слом графика)
+    if (!lp || lp === openItem._lastPrice) return;   // цена не изменилась — не мигаем
+    openItem._lastPrice = lp;
+    const bp = document.getElementById('bigp'); if (bp) bp.innerHTML = fmt(lp) + ' <span>₮</span>';
     const sl = document.getElementById('srcline');
     if (sl) sl.textContent = 'Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · live';
     const alp = document.getElementById('alpick');
     if (hAvgs.length && !openItem._scrub && !(alp && alp.children.length))
-      await paintCard(it, id, pr.price, hAvgs.concat(pr.price), {live: true, times: hTimes.concat(new Date().toISOString())});
+      await paintCard(it, id, po, hAvgs.concat(lp), {live: true, times: hTimes.concat(new Date().toISOString())});
   };
   await applyLive();
   openItem._tick = setInterval(() => {
@@ -898,6 +900,7 @@ async function openItem(id) {
 
 async function paintCard(it, id, p, avgs, opts) {
   opts = opts || {};
+  avgs = (avgs || []).filter(v => typeof v === 'number' && isFinite(v));  // только числа — иначе график ломается
   const price = p.price || 0;
 
   let d24 = null, d7 = null;
