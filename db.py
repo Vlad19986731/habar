@@ -74,6 +74,8 @@ _USER_COLUMNS = [
 
 async def init() -> None:
     async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("PRAGMA journal_mode=WAL")     # устойчивость к сбоям питания + конкурентное чтение
+        await db.execute("PRAGMA synchronous=NORMAL")   # безопасно с WAL, быстро
         # порядок важен: таблицы -> миграция колонок -> индексы по новым колонкам
         await db.executescript(SCHEMA)
         cur = await db.execute("PRAGMA table_info(users)")
@@ -489,10 +491,14 @@ async def item_series(item_id: str, days: int = 7) -> list[tuple]:
 
 
 async def history_add_many(rows: list[tuple]) -> None:
-    """rows: [(item_id, ts, price), ...] — массовая вставка (бэкфилл)."""
+    """rows: [(item_id, ts, price), ...] — массовая вставка. Пишем ТОЛЬКО реальные цены (>0, не NaN)."""
+    clean = [(i, t, p) for (i, t, p) in rows
+             if isinstance(p, (int, float)) and p == p and p > 0]
+    if not clean:
+        return
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executemany(
-            "INSERT OR IGNORE INTO price_history(item_id, ts, price) VALUES(?,?,?)", rows)
+            "INSERT OR IGNORE INTO price_history(item_id, ts, price) VALUES(?,?,?)", clean)
         await db.commit()
 
 
@@ -504,6 +510,8 @@ async def history_cleanup(days: int = 90) -> None:
 
 
 async def history_add(item_id: str, ts: str, price: float) -> None:
+    if not (isinstance(price, (int, float)) and price == price and price > 0):
+        return                                          # только реальные цены (>0, не NaN)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "INSERT OR IGNORE INTO price_history(item_id, ts, price) VALUES(?,?,?)",
