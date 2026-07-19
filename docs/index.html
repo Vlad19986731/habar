@@ -863,22 +863,27 @@ async function openItem(id) {
   const cch = (PRICES && PRICES[id]) || [];
   const cachedP = {price: cch[0] || 0, referencePrice: cch[1] || 0};
   await paintCard(it, id, cachedP, [], {ch24: (cch[2] == null ? null : cch[2]), live: false});
-  // 2) ФОНОМ подтягиваем живую цену + график и обновляем карточку (чужой API бывает медленный/недоступен)
+  // 2) ГРАФИК из НАШЕЙ истории (быстро, надёжно) — рисуем СРАЗУ, не дожидаясь чужого API
   try {
-    // График — из НАШЕЙ истории (надёжно, без чужого API); живая цена — из чужого API (best-effort)
-    const settled = await Promise.allSettled([
-      srv('/series', {item_id: id}),
-      api('GetAuctionItemPrice', {auctionItemId: id})
-    ]);
+    const ser = await srv('/series', {item_id: id});
     if (openItem._gen !== myGen) return;                 // юзер уже переоткрыл/ушёл
     const alp = document.getElementById('alpick');
-    if (alp && alp.children.length) return;              // не сбиваем открытый выбор порога
-    const ser = settled[0].status === 'fulfilled' ? settled[0].value : null;
-    const spts = ((ser && ser.prices) || []).filter(x => x.priceAvg);
-    const pr = settled[1].status === 'fulfilled' ? settled[1].value : null;
-    const livePrice = (pr && pr.price) ? pr.price : cachedP;
-    await paintCard(it, id, livePrice, spts.map(x => x.priceAvg), {live: true, times: spts.map(x => x.timestamp)});
-  } catch(e) { /* тихо: остаётся мгновенная кэш-карточка */ }
+    if (!(alp && alp.children.length)) {                 // не сбиваем открытый выбор порога
+      const spts = ((ser && ser.prices) || []).filter(x => x.priceAvg);
+      await paintCard(it, id, cachedP, spts.map(x => x.priceAvg), {live: true, times: spts.map(x => x.timestamp)});
+    }
+  } catch(e) { /* остаётся мгновенная кэш-карточка */ }
+  // 3) ЖИВАЯ цена из чужого API — ОТДЕЛЬНО, фоном; график её НЕ ждёт, обновляем только цену
+  try {
+    const pr = await api('GetAuctionItemPrice', {auctionItemId: id});
+    if (openItem._gen !== myGen) return;
+    if (pr && pr.price) {
+      const bp = document.getElementById('bigp');
+      if (bp) bp.innerHTML = fmt(pr.price) + ' <span>₮</span>';
+      const sl = document.getElementById('srcline');
+      if (sl) sl.textContent = 'Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com';
+    }
+  } catch(e) {}
 }
 
 async function paintCard(it, id, p, avgs, opts) {
@@ -945,7 +950,7 @@ async function paintCard(it, id, p, avgs, opts) {
       '<div style="flex:1;min-width:0"><div class="label">Аукцион · Операции</div><div class="cname" id="cname">' + displayName(it) + '</div></div>' +
       (RUN[it.id] ? '<button class="langbtn" id="langbtn">' + (nameLang === 'ru' ? 'EN' : 'RU') + '</button>' : '') +
     '</div>' +
-    '<div class="bigprice num">' + (price ? fmt(price) : '…') + ' <span>₮</span></div>' +
+    '<div class="bigprice num" id="bigp">' + (price ? fmt(price) : '…') + ' <span>₮</span></div>' +
     '<div class="chips">' + chip(d24,'24Ч') + chip(d7,'7Д') + '</div>' +
     (avgs.length ? ('<div class="cw" id="chartw">' + chartSvg(avgs) + '<div class="cx" id="chx"></div><div class="cdot" id="chdot"></div><div class="ctip" id="chtip"><div class="v"></div><div class="d"></div></div></div>') : ('<div style="height:72px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:11px">' + (opts.live ? 'пока нет истории цен для графика' : 'график за 7 дней загружается…') + '</div>')) +
     '<div class="chart-meta"><span>' + (p.referencePrice ? 'РЕФ. ЦЕНА ' + fmt(p.referencePrice) : '') + '</span><span>7 ДНЕЙ</span></div>' +
@@ -955,7 +960,7 @@ async function paintCard(it, id, p, avgs, opts) {
       '<button class="btn ' + (inWl?'fill':'') + '" id="wlbtn">' + (inWl ? '✓ В избранном' : '⭐ В избранное') + '</button>' +
     '</div>' +
     alertBlock +
-    '<div class="src">' + (opts.live ? 'Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com' : '≈ цена за последний час · обновляю…') + '</div>' +
+    '<div class="src" id="srcline">' + (opts.live ? 'Обновлено ' + new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) + ' · deltaforceapi.com' : '≈ цена за последний час · обновляю…') + '</div>' +
     '</div>';
   $('#bk').onclick = goBack;
   if (avgs.length) {
