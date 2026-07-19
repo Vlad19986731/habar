@@ -53,15 +53,22 @@ async def get_series(item_id: str, days: int = 7) -> list[dict]:
 
 
 async def get_stash_value(player_id: str) -> float | None:
-    """Текущая стоимость стэша игрока (None, если сервис ещё не собрал данные)."""
+    """Текущая чистая стоимость стэша игрока (поле assetsNet, приходит строкой).
+
+    Формат ответа: {"stash": {"assetsNet": "...", "assetsLiquid": "...", ...}}.
+    None — если сервис не нашёл игрока (404) или не отдал данные.
+    """
     try:
         data = await _call("GetPlayerOperationStashValue", {"playerId": player_id})
     except httpx.HTTPStatusError:
         return None
-    raw = data.get("stashValue", data.get("value"))
-    if isinstance(raw, dict):
-        raw = raw.get("value", raw.get("stashValue"))
-    return float(raw) if isinstance(raw, (int, float)) else None
+    stash = data.get("stash") or data
+    raw = stash.get("assetsNet", stash.get("assetsLiquid",
+          stash.get("value", stash.get("stashValue"))))
+    try:
+        return float(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 async def get_current_season() -> dict | None:

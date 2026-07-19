@@ -1564,17 +1564,15 @@ async function loadProfileData(prof) {
   } catch(e){}
   try {
     const sv = await api('GetPlayerOperationStashValue', {playerId: prof.id});
-    let raw = sv.stashValue !== undefined ? sv.stashValue : sv.value;
-    let val = null;
-    if (raw && typeof raw === 'object') val = raw.value !== undefined ? raw.value : raw.stashValue;
-    else if (typeof raw === 'number') val = raw;
+    const st = (sv && sv.stash) || sv || {};                       // {"stash":{"assetsNet":"...",...}}
+    let val = Number(st.assetsNet != null ? st.assetsNet : st.assetsLiquid);
+    if (!isFinite(val)) val = null;
     let hist = [];
     try {
       const h = await api('GetPlayerOperationHistoricalStashValue',
         {playerId: prof.id, startTime: new Date(Date.now() - 30 * 864e5).toISOString().slice(0,13) + ':00:00Z'});
-      const arr = h.values || h.stashValues || h.prices || [];
-      hist = arr.map(x => (typeof x === 'number') ? x : (x.value !== undefined ? x.value : x.stashValue))
-                .filter(x => typeof x === 'number');
+      const arr = h.stashes || h.values || [];                     // {"stashes":[{"assetsNet":"...","createdAt":...}]}
+      hist = arr.map(x => Number(x && x.assetsNet != null ? x.assetsNet : x)).filter(x => isFinite(x));
     } catch(e){}
     if (val === null && hist.length) val = hist[hist.length - 1];
     if (val === null || val === undefined) throw new Error('нет данных');
