@@ -882,13 +882,20 @@ async def market_snapshot(bot: Bot = None):
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
     rows, refs, fails = [], {}, 0
     for item_id in ids:
-        try:
-            p = await api.get_price(item_id)
-            if p and p.get("price"):
-                rows.append((item_id, now, p["price"]))
-                refs[item_id] = p.get("referencePrice")
-        except Exception:
-            fails += 1
+        p = await api.get_price(item_id)   # None при таймауте/ошибке (у ~45 предметов спот-цена подвисает)
+        if p and p.get("price"):
+            rows.append((item_id, now, p["price"]))
+            refs[item_id] = p.get("referencePrice")
+        else:
+            # спот-цена не отдалась — берём последнюю точку из серии (она стабильна), чтобы история не замирала
+            try:
+                series = await api.get_series(item_id, days=1)
+                if series and series[-1].get("priceAvg"):
+                    rows.append((item_id, now, series[-1]["priceAvg"]))
+                else:
+                    fails += 1
+            except Exception:
+                fails += 1
         await asyncio.sleep(0.1)
     if rows:
         await db.history_add_many(rows)

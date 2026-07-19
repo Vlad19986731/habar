@@ -32,11 +32,13 @@ async def list_all_items() -> list[dict]:
 
 
 async def get_price(item_id: str) -> dict | None:
-    """{price, referencePrice, createdAt} или None."""
+    """{price, referencePrice, createdAt} или None. Короткий таймаут: часть предметов подвисает."""
     try:
-        data = await _call("GetAuctionItemPrice", {"auctionItemId": item_id})
-        return data.get("price")
-    except httpx.HTTPStatusError:
+        r = await _client.post(f"{API_BASE}/GetAuctionItemPrice",
+                               json={"auctionItemId": item_id}, timeout=8)
+        r.raise_for_status()
+        return r.json().get("price")
+    except Exception:
         return None
 
 
