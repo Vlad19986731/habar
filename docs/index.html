@@ -375,6 +375,9 @@
     <button class="navitem big" data-tab="stash">
       <span class="ni"><svg viewBox="0 0 20 20"><polygon points="10,1.5 12.6,7 18.5,7.8 14.2,11.9 15.2,17.7 10,14.9 4.8,17.7 5.8,11.9 1.5,7.8 7.4,7"/></svg></span><span class="nl">Избранное</span>
     </button>
+    <button class="navitem big" data-tab="pen">
+      <span class="ni"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><circle cx="10" cy="10" r="4.6" fill="#060E13"/><circle cx="10" cy="10" r="1.8"/></svg></span><span class="nl">Пробитие</span>
+    </button>
     <div class="navdiv"></div>
     <button class="navitem sec" data-tab="support">
       <svg viewBox="0 0 20 20"><path d="M10 2.5c-4.3 0-7.5 2.8-7.5 6.2 0 1.9 1 3.6 2.6 4.8-.1 1-.6 2.1-1.3 2.9 1.4-.2 2.7-.7 3.7-1.4.8.3 1.7.4 2.5.4 4.3 0 7.5-2.8 7.5-6.2S14.3 2.5 10 2.5z"/><circle cx="6.6" cy="8.7" r="1" fill="#060E13"/><circle cx="10" cy="8.7" r="1" fill="#060E13"/><circle cx="13.4" cy="8.7" r="1" fill="#060E13"/></svg><span class="nl">Поддержка</span>
@@ -1709,6 +1712,7 @@ document.querySelectorAll('.navitem').forEach(b => b.onclick = () => {
   else if (tab === 'flips') renderFlips();
   else if (tab === 'stash') renderStash();
   else if (tab === 'support') renderSupport();
+  else if (tab === 'pen') renderPen();
   else renderMore();
 });
 
@@ -1723,6 +1727,37 @@ function tabFromHash() {
   if (h === 'flips') return 'flips';
   return 'home';
 }
+function renderPen() {
+  const rar = {1:'#c9d1d6',2:'#4CAF7D',3:'#4a90e2',4:'#a06bff',5:'#E0B352',6:'#E05252'};
+  const cls = [1,2,3,4,5,6];
+  const ammo = [
+    {n:'7.62×51 M61', p:6}, {n:'7.62×51 M62', p:5}, {n:'7.62×51 M80', p:4}, {n:'7.62×51 BPZ', p:3},
+    {n:'5.56×45 M995', p:5}, {n:'5.56×45 M855A1', p:4}, {n:'5.56×45 базовый', p:2},
+    {n:'9×39 SP6', p:4}, {n:'9×19 AP', p:4}, {n:'9×19 базовый', p:1}
+  ];
+  const st = (p,c) => p>c ? ['var(--green-bg)','var(--green)','✓'] : (p===c ? ['rgba(224,178,75,.14)','var(--amber)','≈'] : ['var(--red-bg)','var(--red)','✕']);
+  let head = '<th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--text2);font-family:var(--mono)">ПАТРОН · БРОНЯ</th>';
+  cls.forEach(c => head += '<th style="padding:6px 0;font-size:11px;color:var(--text);font-family:var(--mono);min-width:34px">' + c + '<div style="height:3px;margin-top:3px;background:' + rar[c] + '"></div></th>');
+  let rows = '';
+  ammo.forEach(a => {
+    let cells = '';
+    cls.forEach(c => { const s = st(a.p, c); cells += '<td style="text-align:center;padding:10px 0;background:' + s[0] + ';color:' + s[1] + ';font-weight:800;border:1px solid var(--app)">' + s[2] + '</td>'; });
+    rows += '<tr><td style="text-align:left;padding:9px 8px;white-space:nowrap;font-size:12px;border:1px solid var(--app)">' + a.n + ' <span style="color:var(--text3);font-family:var(--mono);font-size:10px">L' + a.p + '</span></td>' + cells + '</tr>';
+  });
+  view.innerHTML =
+    '<div class="card cut" style="margin-top:6px"><div class="strip"></div>' +
+      '<div class="label">Пробитие · патрон vs броня</div>' +
+      '<div class="cname" style="margin:4px 0 10px">Возьмёт ли патрон эту броню</div>' +
+      '<div style="display:flex;gap:12px;font-size:11px;margin-bottom:10px;flex-wrap:wrap">' +
+        '<span style="color:var(--green)">✓ пробивает</span><span style="color:var(--amber)">≈ частично</span><span style="color:var(--red)">✕ держит</span>' +
+      '</div>' +
+      '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:330px"><tr>' + head + '</tr>' + rows + '</table></div>' +
+      '<div class="hint" style="text-align:left;padding:12px 0 0">Правило: чтобы пробить броню класса N, нужен патрон уровня ≥ N. При равном уровне в HP проходит ~25% (остальное держит броня, теряя прочность).</div>' +
+      '<div class="hint" style="text-align:left;padding:8px 0 0">🦵 <b>Руки и ноги не защищены</b> — туда полный урон любым патроном. 🪖 Голова — шлемом (та же логика). HP игрока — 100.</div>' +
+      '<div class="hint" style="text-align:left;padding:8px 0 0;color:var(--text3)">RIP-патроны против брони бесполезны, но много урона по незащищённому телу. Точный урон/выстрелы до килла зависят от оружия и в открытых данных не публикуются — поэтому показываем именно пробитие. Классы 1–6: белый · зелёный · синий · фиол. · золото · красный.</div>' +
+    '</div>';
+}
+
 function renderSupport() {
   view.innerHTML =
     '<div class="card cut" style="margin-top:6px"><div class="strip"></div>' +
