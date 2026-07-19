@@ -214,7 +214,8 @@ async def api_support(request, u):
     uname = "@" + u["username"] if u.get("username") else "(без ника)"
     text = ("📩 <b>Поддержка Хабар</b>\n"
             "От: " + html.escape(u.get("first_name") or "") + " " + html.escape(uname) +
-            " · id <code>" + str(u["id"]) + "</code>\n\n" + html.escape(msg))
+            " · id <code>" + str(u["id"]) + "</code>\n\n" + html.escape(msg) +
+            "\n\n<i>↩️ Ответь на это сообщение — я перешлю ответ пользователю.</i>")
     ok = False
     if _bot:
         for aid in ADMIN_IDS:

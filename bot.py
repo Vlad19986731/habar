@@ -363,6 +363,25 @@ def remember_ephemeral(chat_id: int, *msg_ids) -> None:
     _ephemeral[chat_id] = [m for m in msg_ids if m]
 
 
+@router.message(F.reply_to_message & F.reply_to_message.text.contains("Поддержка Хабар"))
+async def support_reply(m: Message):
+    """Админ ответил (reply) на сообщение поддержки → бот пересылает ответ пользователю."""
+    if m.from_user.id not in ADMIN_IDS:
+        return
+    match = re.search(r"id\s+(\d+)", m.reply_to_message.text or "")
+    if not match:
+        return await m.reply("⚠️ Не нашёл id пользователя в сообщении.")
+    if not m.text:
+        return await m.reply("⚠️ Ответ должен быть текстом.")
+    uid = int(match.group(1))
+    try:
+        await m.bot.send_message(uid, "💬 <b>Ответ поддержки Хабар</b>\n\n" + html_mod.escape(m.text))
+        await m.reply("✅ Отправлено пользователю.")
+    except Exception:
+        log.exception("Ответ поддержки: не отправил %s", uid)
+        await m.reply("❌ Не отправилось (пользователь мог заблокировать бота).")
+
+
 @router.message(F.text & ~F.text.startswith("/"))
 async def search(m: Message):
     """Поиск переехал в приложение — мягко направляем туда."""
